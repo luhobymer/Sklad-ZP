@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, ScrollView, TextInput, StyleSheet, Text, Alert, SafeAreaView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, ScrollView, TextInput, StyleSheet, Text, Alert, SafeAreaView, KeyboardAvoidingView, Platform, TouchableOpacity, Switch } from 'react-native';
 import { Part, createPart, validatePart, isPartValid, PartValidation } from '../models/Part';
 import { CameraService } from '../services/CameraService';
 import FileStorageService from '../services/FileStorageService';
@@ -101,6 +101,60 @@ const PartForm: React.FC<PartFormScreenProps> = ({ route, navigation }) => {
               if (partInfo.manufacturer) handleChange('manufacturer', partInfo.manufacturer);
               if (partInfo.price) handleChange('price', partInfo.price.toString());
               if (partInfo.category) handleChange('category', partInfo.category);
+              
+              // Автоматично встановлюємо сумісність з автомобілями на основі розпізнаного тексту
+              if (partInfo.name) {
+                // Спробуємо визначити сумісні автомобілі з назви запчастини
+                const carBrands = ['Volkswagen', 'VW', 'Audi', 'Skoda', 'BMW', 'Mercedes', 'Toyota', 'Honda', 'Mazda', 'Ford', 'Opel', 'Renault', 'Peugeot', 'Citroen', 'Fiat', 'Hyundai', 'Kia'];
+                const carModels = {
+                  'Volkswagen': ['Golf', 'Passat', 'Polo', 'Tiguan', 'Touareg', 'Jetta'],
+                  'VW': ['Golf', 'Passat', 'Polo', 'Tiguan', 'Touareg', 'Jetta'],
+                  'Audi': ['A3', 'A4', 'A6', 'Q5', 'Q7', 'TT'],
+                  'Skoda': ['Octavia', 'Fabia', 'Superb', 'Kodiaq', 'Karoq'],
+                  'BMW': ['3', '5', '7', 'X3', 'X5', 'X6'],
+                  'Mercedes': ['C', 'E', 'S', 'GLC', 'GLE', 'GLS'],
+                  'Toyota': ['Corolla', 'Camry', 'RAV4', 'Land Cruiser', 'Yaris'],
+                  'Honda': ['Civic', 'Accord', 'CR-V', 'HR-V', 'Jazz'],
+                  'Mazda': ['3', '6', 'CX-5', 'CX-30', 'MX-5'],
+                  'Ford': ['Focus', 'Fiesta', 'Mondeo', 'Kuga', 'Mustang'],
+                  'Opel': ['Astra', 'Corsa', 'Insignia', 'Mokka', 'Grandland'],
+                  'Renault': ['Clio', 'Megane', 'Captur', 'Kadjar', 'Scenic'],
+                  'Peugeot': ['208', '308', '3008', '5008', '508'],
+                  'Citroen': ['C3', 'C4', 'C5', 'Berlingo', 'Picasso'],
+                  'Fiat': ['500', 'Panda', 'Tipo', 'Punto', 'Doblo'],
+                  'Hyundai': ['i30', 'Tucson', 'Santa Fe', 'Kona', 'i20'],
+                  'Kia': ['Ceed', 'Sportage', 'Sorento', 'Rio', 'Stonic']
+                };
+                
+                const compatibleCars: string[] = [];
+                const nameText = partInfo.name.toLowerCase() + ' ' + (partInfo.description || '').toLowerCase();
+                
+                // Шукаємо марки автомобілів в тексті
+                carBrands.forEach(brand => {
+                  if (nameText.includes(brand.toLowerCase())) {
+                    // Якщо знайдено марку, шукаємо моделі
+                    const models = carModels[brand] || [];
+                    let modelFound = false;
+                    
+                    models.forEach(model => {
+                      if (nameText.includes(model.toLowerCase())) {
+                        compatibleCars.push(`${brand} ${model}`);
+                        modelFound = true;
+                      }
+                    });
+                    
+                    // Якщо модель не знайдено, додаємо просто марку
+                    if (!modelFound) {
+                      compatibleCars.push(brand);
+                    }
+                  }
+                });
+                
+                // Якщо знайдено сумісні автомобілі, встановлюємо їх
+                if (compatibleCars.length > 0) {
+                  handleChange('compatibleCars', compatibleCars);
+                }
+              }
             } else {
               // Якщо отримано тільки артикул
               handleChange('articleNumber', text);
@@ -213,6 +267,40 @@ const PartForm: React.FC<PartFormScreenProps> = ({ route, navigation }) => {
             </View>
 
             <View style={styles.field}>
+              <Text style={styles.label}>Стан запчастини</Text>
+              <View style={styles.radioContainer}>
+                <TouchableOpacity 
+                  style={[styles.radioButton, formData.isNew ? styles.radioButtonSelected : {}]}
+                  onPress={() => handleChange('isNew', true)}
+                >
+                  <Text style={formData.isNew ? styles.radioTextSelected : styles.radioText}>Нова</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.radioButton, !formData.isNew ? styles.radioButtonSelected : {}]}
+                  onPress={() => handleChange('isNew', false)}
+                >
+                  <Text style={!formData.isNew ? styles.radioTextSelected : styles.radioText}>Б/У</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Сумісність з автомобілями</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={(formData.compatibleCars || []).join(', ')}
+                onChangeText={(value) => {
+                  const cars = value.split(',').map(car => car.trim()).filter(car => car !== '');
+                  handleChange('compatibleCars', cars.length > 0 ? cars : null);
+                }}
+                placeholder="Введіть марки та моделі автомобілів через кому (наприклад: Volkswagen Golf, Audi A3)"
+                multiline
+                numberOfLines={3}
+              />
+              <Text style={styles.hint}>Введіть марки та моделі автомобілів через кому</Text>
+            </View>
+
+            <View style={styles.field}>
               <Text style={styles.label}>Опис</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -306,6 +394,37 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.lg,
     marginBottom: spacing.xl
+  },
+  radioContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: spacing.md,
+    marginTop: spacing.xs
+  },
+  radioButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center'
+  },
+  radioButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary
+  },
+  radioText: {
+    color: colors.text
+  },
+  radioTextSelected: {
+    color: colors.background,
+    fontWeight: 'bold'
+  },
+  hint: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: spacing.xs
   }
 });
 

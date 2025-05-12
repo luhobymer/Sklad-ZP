@@ -4,10 +4,6 @@ buildscript {
   repositories {
     google()
     mavenCentral()
-    maven { url "file://${rootProject.projectDir}/localRepo" }
-    maven { url "https://maven.google.com" }
-    maven { url "https://jcenter.bintray.com" }
-    maven { url "https://repo1.maven.org/maven2" }
   }
   dependencies {
     classpath('com.android.tools.build:gradle')
@@ -31,13 +27,9 @@ allprojects {
       url(reactNativeAndroidDir)
     }
 
-    maven { url "file://${rootProject.projectDir}/localRepo" }
     google()
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
-    maven { url "https://maven.google.com" }
-    maven { url "https://jcenter.bintray.com" }
-    maven { url "https://repo1.maven.org/maven2" }
   }
 }
 

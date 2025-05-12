@@ -20,8 +20,18 @@ const Dashboard: React.FC = () => {
   const storageService = FileStorageService.getInstance();
 
   useEffect(() => {
+    // Завантажуємо дані при першому рендері
     loadData();
-  }, []);
+    
+    // Додаємо слухач подій фокусу, щоб оновлювати дані при поверненні на екран
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('Dashboard отримав фокус, оновлюємо дані');
+      loadData();
+    });
+    
+    // Видаляємо слухач при розмонтуванні компонента
+    return unsubscribe;
+  }, [navigation]);
 
   const loadData = async () => {
     try {
@@ -107,36 +117,7 @@ const Dashboard: React.FC = () => {
         </View>
       </View>
 
-      {/* Запчастини, які закінчуються */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Запчастини, які закінчуються</Text>
-        {lowStockParts.length > 0 ? (
-          <FlatList
-            data={lowStockParts}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => navigation.navigate('PartDetails', { part: item })}
-              >
-                <View style={styles.lowStockItem}>
-                  <View style={styles.lowStockInfo}>
-                    <Text style={styles.lowStockName}>{item.name}</Text>
-                    <Text style={styles.lowStockArticle}>{item.articleNumber}</Text>
-                  </View>
-                  <View style={styles.quantityContainer}>
-                    <Text style={styles.quantityText}>{item.quantity} шт.</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            )}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.lowStockList}
-          />
-        ) : (
-          <Text style={styles.emptyText}>Всі запчастини в достатній кількості</Text>
-        )}
-      </View>
+      {/* Розділ "Запчастини, які закінчуються" прибрано на прохання користувача */}
 
       {/* Останні додані */}
       <View style={styles.section}>

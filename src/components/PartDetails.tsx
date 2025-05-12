@@ -51,8 +51,30 @@ const PartDetails: React.FC<PartDetailsScreenProps> = ({ route, navigation }) =>
   };
   
   const getCategoryName = (category: string): string => {
-    const categoryKey = `categories.${category}`;
-    return t(categoryKey);
+    // Перетворюємо назви категорій з української на англійську для правильного відображення
+    const categoryMap: Record<string, string> = {
+      "двигун": "engine",
+      "трансмісія": "transmission",
+      "підвіска": "suspension",
+      "гальма": "brakes",
+      "електрика": "electrical",
+      "кузов": "body",
+      "салон": "interior",
+      "інше": "other",
+      "інтер'єр": "interior",
+      "освітлення": "electrical"
+    };
+    
+    // Перевіряємо, чи потрібно перетворити категорію
+    const normalizedCategory = category.toLowerCase();
+    const mappedCategory = categoryMap[normalizedCategory] || "other";
+    
+    // Отримуємо переклад з використанням правильного ключа
+    const categoryKey = `categories.${mappedCategory}`;
+    const translatedCategory = t(categoryKey);
+    
+    // Якщо переклад не знайдено, повертаємо оригінальну категорію
+    return translatedCategory || category;
   };
   
   const handleEdit = () => {

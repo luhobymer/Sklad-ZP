@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, TextInput, Text, Modal, Alert, TouchableOpacity, Switch, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, FlatList, StyleSheet, TextInput, Text, TouchableOpacity, Alert, Switch, Modal, ScrollView } from 'react-native';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing } from '../theme/theme';
 import Card from './Card';
 import Button from './Button';
 import QuickActions from './QuickActions';
-import AdvancedSearch from './AdvancedSearch';
+import AdvancedSearchNew from './AdvancedSearchNew';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,9 +70,20 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
     
     // Застосовуємо фільтр за категорією, якщо він вказаний
     if (categoryFilter) {
-      result = result.filter(part => 
-        part.category && part.category.toLowerCase().includes(categoryFilter.toLowerCase())
-      );
+      console.log('Застосовуємо фільтр за категорією:', categoryFilter);
+      
+      // Фільтруємо за точною категорією, а не за частиною тексту
+      result = result.filter(part => {
+        if (!part.category) return false;
+        
+        // Нормалізуємо категорію для порівняння
+        const normalizedPartCategory = part.category.toLowerCase().trim();
+        const normalizedFilterCategory = categoryFilter.toLowerCase().trim();
+        
+        return normalizedPartCategory === normalizedFilterCategory;
+      });
+      
+      console.log('Знайдено запчастин за категорією:', result.length);
     }
     
     // Застосовуємо пошуковий запит, якщо він є
@@ -231,15 +242,33 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
           >
             <Text style={[styles.categoryText, activeFilter === null && styles.activeCategoryText]}>Всі</Text>
           </TouchableOpacity>
-          {['Двигун', 'Гальма', 'Підвіска', 'Електрика', 'Кузов', 'Трансмісія', 'Охолодження'].map(category => (
-            <TouchableOpacity 
-              key={category}
-              style={[styles.categoryButton, activeFilter === category && styles.activeCategoryButton]}
-              onPress={() => handleCategoryFilter(category)}
-            >
-              <Text style={[styles.categoryText, activeFilter === category && styles.activeCategoryText]}>{category}</Text>
-            </TouchableOpacity>
-          ))}
+          {/* Використовуємо список категорій з перекладів */}
+          {['двигун', 'гальма', 'підвіска', 'електрика', 'кузов', 'трансмісія', 'інтер\'єр', 'інше'].map(category => {
+            // Отримуємо назву категорії з правильним відмінком для відображення
+            const displayName = (() => {
+              switch(category) {
+                case 'двигун': return 'Двигун';
+                case 'гальма': return 'Гальма';
+                case 'підвіска': return 'Підвіска';
+                case 'електрика': return 'Електрика';
+                case 'кузов': return 'Кузов';
+                case 'трансмісія': return 'Трансмісія';
+                case 'інтер\'єр': return 'Інтер\'єр';
+                case 'інше': return 'Інше';
+                default: return category;
+              }
+            })();
+            
+            return (
+              <TouchableOpacity 
+                key={category}
+                style={[styles.categoryButton, activeFilter === category && styles.activeCategoryButton]}
+                onPress={() => handleCategoryFilter(category)}
+              >
+                <Text style={[styles.categoryText, activeFilter === category && styles.activeCategoryText]}>{displayName}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
       
@@ -266,7 +295,7 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
         transparent={true}
         onRequestClose={() => setShowAdvancedSearch(false)}
       >
-        <AdvancedSearch 
+        <AdvancedSearchNew 
           onSearchResults={handleAdvancedSearchResults}
           onClose={() => setShowAdvancedSearch(false)}
         />

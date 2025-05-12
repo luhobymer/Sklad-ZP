@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TextInput, Text, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Slider from '@react-native-community/slider';
+import { Ionicons } from '@expo/vector-icons';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing } from '../theme/theme';
@@ -21,11 +22,13 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
     isNew: undefined as boolean | undefined,
     inStock: false,
     sortBy: 'updatedAt' as 'price' | 'name' | 'updatedAt' | 'quantity',
-    sortOrder: 'DESC' as 'ASC' | 'DESC'
+    sortOrder: 'DESC' as 'ASC' | 'DESC',
+    carModel: ''
   });
 
   const [categories, setCategories] = useState<string[]>([]);
   const [manufacturers, setManufacturers] = useState<string[]>([]);
+  const [carModels, setCarModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -46,14 +49,30 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
       // Використовуємо методи сховища для отримання унікальних категорій та виробників
       const loadedCategories = await storageService.getUniqueCategories();
       const loadedManufacturers = await storageService.getUniqueManufacturers();
+      const loadedParts = await storageService.getAllParts();
       
-      setCategories(loadedCategories);
-      setManufacturers(loadedManufacturers);
+      // Отримуємо унікальні моделі автомобілів
+      const uniqueCarModels = new Set<string>();
+      loadedParts.forEach(part => {
+        if (part.compatibleCars && part.compatibleCars.length > 0) {
+          part.compatibleCars.forEach(car => uniqueCarModels.add(car.trim()));
+        }
+      });
+      
+      // Переконуємося, що категорії відображаються правильно
+      const formattedCategories = loadedCategories.map(category => {
+        return category;
+      });
+      
+      setCategories(['', ...formattedCategories]);
+      setManufacturers(['', ...loadedManufacturers]);
+      setCarModels(['', ...Array.from(uniqueCarModels).sort()]);
     } catch (error) {
       console.error('Помилка при завантаженні фільтрів:', error);
-      // Якщо виникла помилка, використовуємо тестові дані
-      setCategories(['Двигун', 'Трансмісія', 'Гальма', 'Підвіска', 'Електрика', 'Кузов', 'Інше']);
-      setManufacturers(['BOSCH', 'DENSO', 'VALEO', 'FEBI', 'SACHS', 'LEMFORDER', 'BREMBO', 'TRW', 'Інше']);
+      // Тестові дані для розробки
+      setCategories(['', 'Двигун', 'Трансмісія', 'Підвіска', 'Гальма', 'Електрика']);
+      setManufacturers(['', 'Bosch', 'Valeo', 'Denso', 'Continental', 'ZF']);
+      setCarModels(['', 'Volkswagen Golf', 'Audi A3', 'BMW 3', 'Mercedes C-Class']);
     } finally {
       setLoading(false);
     }
@@ -78,7 +97,17 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
         return;
       }
       
-      const results = await storageService.searchParts(searchParams);
+      // Підготовка параметрів пошуку
+      const searchParamsToUse = {...searchParams};
+      
+      // Перетворюємо категорію на нижній регістр для пошуку
+      if (searchParamsToUse.category) {
+        searchParamsToUse.category = searchParamsToUse.category.toLowerCase();
+        console.log('Категорія для пошуку:', searchParamsToUse.category);
+      }
+      
+      const results = await storageService.searchParts(searchParamsToUse);
+      console.log('Знайдено результатів:', results.length);
       onSearchResults(results);
       onClose();
     } catch (error) {
@@ -99,191 +128,214 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
       isNew: undefined,
       inStock: false,
       sortBy: 'updatedAt',
-      sortOrder: 'DESC'
+      sortOrder: 'DESC',
+      carModel: ''
     });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Розширений пошук</Text>
-      
-      <ScrollView style={styles.scrollContainer}>
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Пошуковий запит</Text>
-          <TextInput
-            style={styles.input}
-            value={searchParams.query}
-            onChangeText={(value) => handleParamChange('query', value)}
-            placeholder="Введіть артикул, назву або інше"
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Категорія</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={searchParams.category}
-              onValueChange={(value) => handleParamChange('category', value)}
-              style={styles.picker}
-            >
-              <Picker.Item label="Всі категорії" value="" />
-              {categories.map((category, index) => (
-                <Picker.Item key={index} label={category} value={category} />
-              ))}
-            </Picker>
-          </View>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Виробник</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={searchParams.manufacturer}
-              onValueChange={(value) => handleParamChange('manufacturer', value)}
-              style={styles.picker}
-            >
-              <Picker.Item label="Всі виробники" value="" />
-              {manufacturers.map((manufacturer, index) => (
-                <Picker.Item key={index} label={manufacturer} value={manufacturer} />
-              ))}
-            </Picker>
-          </View>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Ціновий діапазон</Text>
-          <View style={styles.priceRangeContainer}>
-            <Text>{searchParams.priceRange.min} ₴</Text>
-            <Text>{searchParams.priceRange.max} ₴</Text>
-          </View>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={10000}
-            step={100}
-            value={searchParams.priceRange.max}
-            onValueChange={(value) => handleParamChange('priceRange', { ...searchParams.priceRange, max: value })}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={colors.border}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Стан</Text>
-          <View style={styles.radioGroup}>
-            <TouchableOpacity
-              style={[styles.radioButton, searchParams.isNew === undefined && styles.radioButtonSelected]}
-              onPress={() => handleParamChange('isNew', undefined)}
-            >
-              <Text style={styles.radioText}>Всі</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.radioButton, searchParams.isNew === true && styles.radioButtonSelected]}
-              onPress={() => handleParamChange('isNew', true)}
-            >
-              <Text style={styles.radioText}>Нові</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.radioButton, searchParams.isNew === false && styles.radioButtonSelected]}
-              onPress={() => handleParamChange('isNew', false)}
-            >
-              <Text style={styles.radioText}>Б/У</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.formGroup}>
-          <View style={styles.checkboxContainer}>
-            <TouchableOpacity
-              style={[styles.checkbox, searchParams.inStock && styles.checkboxSelected]}
-              onPress={() => handleParamChange('inStock', !searchParams.inStock)}
+    <View style={styles.modalContainer}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Розширений пошук</Text>
+        
+        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Пошуковий запит</Text>
+            <TextInput
+              style={styles.input}
+              value={searchParams.query}
+              onChangeText={(value) => handleParamChange('query', value)}
+              placeholder="Введіть артикул, назву або інше"
             />
-            <Text style={styles.checkboxLabel}>Тільки в наявності</Text>
           </View>
-        </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Сортувати за</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={searchParams.sortBy}
-              onValueChange={(value) => handleParamChange('sortBy', value)}
-              style={styles.picker}
-            >
-              <Picker.Item label="Датою оновлення" value="updatedAt" />
-              <Picker.Item label="Ціною" value="price" />
-              <Picker.Item label="Назвою" value="name" />
-              <Picker.Item label="Кількістю" value="quantity" />
-            </Picker>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Категорія</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={searchParams.category}
+                onValueChange={(value) => handleParamChange('category', value)}
+                style={styles.picker}
+                mode="dropdown"
+              >
+                <Picker.Item label="Всі категорії" value="" />
+                {categories.map((category, index) => (
+                  <Picker.Item key={index} label={category} value={category} />
+                ))}
+              </Picker>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Порядок сортування</Text>
-          <View style={styles.radioGroup}>
-            <TouchableOpacity
-              style={[styles.radioButton, searchParams.sortOrder === 'DESC' && styles.radioButtonSelected]}
-              onPress={() => handleParamChange('sortOrder', 'DESC')}
-            >
-              <Text style={styles.radioText}>За спаданням</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.radioButton, searchParams.sortOrder === 'ASC' && styles.radioButtonSelected]}
-              onPress={() => handleParamChange('sortOrder', 'ASC')}
-            >
-              <Text style={styles.radioText}>За зростанням</Text>
-            </TouchableOpacity>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Виробник</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={searchParams.manufacturer}
+                onValueChange={(value) => handleParamChange('manufacturer', value)}
+                style={styles.picker}
+                mode="dropdown"
+              >
+                <Picker.Item label="Всі виробники" value="" />
+                {manufacturers.map((manufacturer, index) => (
+                  <Picker.Item key={index} label={manufacturer} value={manufacturer} />
+                ))}
+              </Picker>
+            </View>
           </View>
-        </View>
-      </ScrollView>
 
-      <View style={styles.buttonContainer}>
-        <Button
-          title="Скинути"
-          onPress={handleReset}
-          variant="secondary"
-          style={styles.resetButton}
-        />
-        <Button
-          title="Пошук"
-          onPress={handleSearch}
-          variant="primary"
-          style={styles.searchButton}
-          loading={loading}
-        />
-        <Button
-          title="Скасувати"
-          onPress={onClose}
-          variant="danger"
-          style={styles.cancelButton}
-        />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Ціновий діапазон: {searchParams.priceRange.min} - {searchParams.priceRange.max} ₴</Text>
+            <View style={styles.priceRangeContainer}>
+              <Text>0 ₴</Text>
+              <Text>10000 ₴</Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={10000}
+              step={100}
+              value={searchParams.priceRange.max}
+              onValueChange={(value) => handleParamChange('priceRange', { ...searchParams.priceRange, max: value })}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.border}
+              thumbTintColor={colors.primary}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Стан</Text>
+            <View style={styles.radioGroup}>
+              <TouchableOpacity
+                style={[styles.radioButton, searchParams.isNew === undefined && styles.radioButtonSelected]}
+                onPress={() => handleParamChange('isNew', undefined)}
+              >
+                <Text style={[styles.radioText, searchParams.isNew === undefined && styles.radioTextSelected]}>Всі</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radioButton, searchParams.isNew === true && styles.radioButtonSelected]}
+                onPress={() => handleParamChange('isNew', true)}
+              >
+                <Text style={[styles.radioText, searchParams.isNew === true && styles.radioTextSelected]}>Нові</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radioButton, searchParams.isNew === false && styles.radioButtonSelected]}
+                onPress={() => handleParamChange('isNew', false)}
+              >
+                <Text style={[styles.radioText, searchParams.isNew === false && styles.radioTextSelected]}>Б/У</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <View style={styles.checkboxContainer}>
+              <TouchableOpacity
+                style={[styles.checkbox, searchParams.inStock && styles.checkboxSelected]}
+                onPress={() => handleParamChange('inStock', !searchParams.inStock)}
+              >
+                {searchParams.inStock && (
+                  <Ionicons name="checkmark" size={16} color="white" />
+                )}
+              </TouchableOpacity>
+              <Text style={styles.checkboxLabel}>Тільки в наявності</Text>
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Сортувати за</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={searchParams.sortBy}
+                onValueChange={(value) => handleParamChange('sortBy', value)}
+                style={styles.picker}
+                mode="dropdown"
+              >
+                <Picker.Item label="Датою оновлення" value="updatedAt" />
+                <Picker.Item label="Ціною" value="price" />
+                <Picker.Item label="Назвою" value="name" />
+                <Picker.Item label="Кількістю" value="quantity" />
+              </Picker>
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Порядок сортування</Text>
+            <View style={styles.radioGroup}>
+              <TouchableOpacity
+                style={[styles.radioButton, searchParams.sortOrder === 'DESC' && styles.radioButtonSelected]}
+                onPress={() => handleParamChange('sortOrder', 'DESC')}
+              >
+                <Text style={[styles.radioText, searchParams.sortOrder === 'DESC' && styles.radioTextSelected]}>За спаданням</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radioButton, searchParams.sortOrder === 'ASC' && styles.radioButtonSelected]}
+                onPress={() => handleParamChange('sortOrder', 'ASC')}
+              >
+                <Text style={[styles.radioText, searchParams.sortOrder === 'ASC' && styles.radioTextSelected]}>За зростанням</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={styles.buttonContainer}>
+          <Button
+            title="Скинути"
+            onPress={handleReset}
+            variant="secondary"
+            style={styles.resetButton}
+          />
+          <Button
+            title="Пошук"
+            onPress={handleSearch}
+            variant="primary"
+            style={styles.searchButton}
+            loading={loading}
+          />
+          <Button
+            title="Скасувати"
+            onPress={onClose}
+            variant="danger"
+            style={styles.cancelButton}
+          />
+        </View>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: spacing.md,
+  },
+  container: {
     backgroundColor: colors.background,
-    padding: spacing.medium,
+    padding: spacing.md,
+    borderRadius: 10,
+    width: '100%',
+    maxHeight: '90%',
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: spacing.medium,
+    marginBottom: spacing.md,
     textAlign: 'center',
     color: colors.text,
   },
   scrollContainer: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: spacing.xl,
+  },
   formGroup: {
-    marginBottom: spacing.medium,
+    marginBottom: spacing.md,
   },
   label: {
     fontSize: 16,
-    marginBottom: spacing.small / 2,
+    marginBottom: spacing.sm,
     color: colors.text,
   },
   input: {
@@ -291,8 +343,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: spacing.small,
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.background,
+    width: '100%',
   },
   pickerContainer: {
     borderWidth: 1,
@@ -307,7 +360,7 @@ const styles = StyleSheet.create({
   priceRangeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.small / 2,
+    marginBottom: spacing.sm,
   },
   slider: {
     width: '100%',
@@ -319,7 +372,7 @@ const styles = StyleSheet.create({
   },
   radioButton: {
     flex: 1,
-    padding: spacing.small,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
@@ -333,17 +386,23 @@ const styles = StyleSheet.create({
   radioText: {
     color: colors.text,
   },
+  radioTextSelected: {
+    color: colors.background,
+    fontWeight: 'bold',
+  },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 4,
-    marginRight: spacing.small,
+    marginRight: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkboxSelected: {
     backgroundColor: colors.primary,
@@ -356,19 +415,19 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.medium,
+    marginTop: spacing.sm,
   },
   resetButton: {
     flex: 1,
-    marginRight: spacing.small / 2,
+    marginRight: spacing.xs,
   },
   searchButton: {
     flex: 1,
-    marginHorizontal: spacing.small / 2,
+    marginHorizontal: spacing.xs,
   },
   cancelButton: {
     flex: 1,
-    marginLeft: spacing.small / 2,
+    marginLeft: spacing.xs,
   },
 });
 

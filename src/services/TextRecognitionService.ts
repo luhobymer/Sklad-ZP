@@ -112,7 +112,7 @@ export class TextRecognitionService {
     }
 
     // Пошук назви (слова з великої літери, можуть містити цифри та спеціальні символи)
-    const namePattern = /([A-ZА-ЯІЇЄ][a-zа-яіїє0-9\s\-\.]{2,}(\s[A-ZА-ЯІЇЄ][a-zа-яіїє0-9\s\-\.]{2,})*))/;
+    const namePattern = /([A-ZА-ЯІЇЄ][a-zа-яіїє0-9\s\-\.]{2,})/;
     for (const line of lines) {
       const nameMatch = line.match(namePattern);
       if (nameMatch && !partInfo.name) {

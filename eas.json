@@ -37,6 +37,21 @@
         "buildType": "apk"
       }
     },
+    "release": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "withoutCredentials": true,
+        "env": {
+          "GRADLE_OPTS": "-Dorg.gradle.jvmargs='-Xmx2048m -XX:MaxPermSize=512m'"
+        },
+        "releaseChannel": "release"
+      },
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
     "production": {
       "android": {
         "buildType": "apk"
@@ -46,4 +61,4 @@
   "submit": {
     "production": {}
   }
-} 
+}

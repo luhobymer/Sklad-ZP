@@ -93,26 +93,40 @@ const CameraScanner: React.FC<CameraScannerScreenProps> = ({ route, navigation }
   
   const handlePickImage = async () => {
     try {
+      console.log('Початок вибору фото з галереї');
+      setScanning(true);
+      
       // Запитуємо дозвіл на доступ до галереї
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Статус дозволу на доступ до галереї:', status);
       
       if (status !== 'granted') {
         Alert.alert('Помилка', 'Для вибору фото необхідно надати доступ до галереї');
+        setScanning(false);
         return;
       }
       
+      console.log('Відкриваємо галерею для вибору фото');
       // Відкриваємо галерею для вибору фото
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.8,
+        base64: false,
       });
       
+      console.log('Результат вибору фото:', result.canceled ? 'Скасовано' : 'Вибрано');
+      
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('Вибрано фото:', result.assets[0].uri);
         await processImage(result.assets[0].uri);
+      } else {
+        setScanning(false);
       }
     } catch (error) {
       console.error('Помилка при виборі фото з галереї:', error);
+      Alert.alert('Помилка', 'Не вдалося вибрати фото: ' + (error instanceof Error ? error.message : 'Невідома помилка'));
+      setScanning(false);
     }
   };
   

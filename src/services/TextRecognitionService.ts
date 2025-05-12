@@ -37,6 +37,16 @@ export class TextRecognitionService {
     }
     
     try {
+      console.log('Початок розпізнавання тексту з зображення:', imageUri);
+      
+      // Перевіряємо, чи існує файл
+      const fileInfo = await FileSystem.getInfoAsync(imageUri);
+      if (!fileInfo.exists) {
+        console.error('Файл зображення не існує:', imageUri);
+        return 'Файл зображення не знайдено';
+      }
+      
+      console.log('Оптимізація зображення для розпізнавання');
       // Спочатку оптимізуємо зображення для кращого розпізнавання
       const manipResult = await ImageManipulator.manipulateAsync(
         imageUri,
@@ -44,14 +54,18 @@ export class TextRecognitionService {
         { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
       );
       
+      console.log('Зображення оптимізовано:', manipResult.uri);
+      
       // Використовуємо Google Cloud Vision API для розпізнавання тексту
       // Це найбільш надійний спосіб для розпізнавання тексту в мобільному додатку
       const apiKey = 'AIzaSyBVvrJLaUvkUd-DhAWxs8LPPWVN_8tQGkI'; // Це демо-ключ, для реального додатку потрібно використовувати власний
       const apiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
       
+      console.log('Конвертація зображення в base64');
       // Конвертуємо зображення в base64
       const base64Image = await this.imageToBase64(manipResult.uri);
       
+      console.log('Підготовка запиту до Google Cloud Vision API');
       // Підготовка запиту до API
       const requestData = {
         requests: [
@@ -69,6 +83,7 @@ export class TextRecognitionService {
         ]
       };
       
+      console.log('Відправка запиту до Google Cloud Vision API');
       // Відправляємо запит до API
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -78,21 +93,27 @@ export class TextRecognitionService {
         body: JSON.stringify(requestData)
       });
       
+      console.log('Отримано відповідь від Google Cloud Vision API, статус:', response.status);
       // Обробляємо відповідь
       const responseData = await response.json();
+      
+      console.log('Аналіз відповіді від API:', JSON.stringify(responseData).substring(0, 200) + '...');
       
       // Перевіряємо наявність результатів
       if (responseData.responses && 
           responseData.responses[0] && 
           responseData.responses[0].textAnnotations && 
           responseData.responses[0].textAnnotations[0]) {
-        return responseData.responses[0].textAnnotations[0].description;
+        const recognizedText = responseData.responses[0].textAnnotations[0].description;
+        console.log('Розпізнаний текст:', recognizedText);
+        return recognizedText;
       } else {
+        console.log('Текст не знайдено на зображенні');
         return 'Текст не знайдено на зображенні';
       }
     } catch (error) {
       console.error('Помилка при розпізнаванні тексту:', error);
-      Alert.alert('Помилка', 'Не вдалося обробити зображення');
+      Alert.alert('Помилка', 'Не вдалося обробити зображення: ' + (error instanceof Error ? error.message : 'Невідома помилка'));
       return 'Не вдалося розпізнати текст з зображення';
     }
   }
@@ -100,13 +121,27 @@ export class TextRecognitionService {
   // Допоміжний метод для конвертації зображення в base64
   private async imageToBase64(uri: string): Promise<string> {
     try {
+      console.log('Початок конвертації зображення в base64, URI:', uri);
+      
+      // Перевіряємо, чи існує файл
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      console.log('Інформація про файл:', fileInfo);
+      
+      if (!fileInfo.exists) {
+        console.error('Файл не існує:', uri);
+        throw new Error('Файл зображення не знайдено');
+      }
+      
       // Читаємо файл як base64
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64
       });
+      
+      console.log('Зображення успішно конвертовано в base64, розмір:', base64.length);
       return base64;
     } catch (error) {
       console.error('Помилка при конвертації зображення в base64:', error);
+      Alert.alert('Помилка', 'Не вдалося обробити зображення. Спробуйте інше фото.');
       throw error;
     }
   }

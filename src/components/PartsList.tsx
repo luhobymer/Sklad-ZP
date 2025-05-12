@@ -121,11 +121,21 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
 
   const handleOpenScanner = () => {
     navigation.navigate('CameraScanner', {
-      onTextRecognized: (text: string) => {
+      onTextRecognized: (text: string, partInfo?: Partial<Part>) => {
         // Обробка розпізнаного тексту після повернення з CameraScanner
-        console.log('Розпізнаний текст:', text);
-        // Тут можна додати логіку пошуку за текстом
-        handleSearch(text);
+        console.log('Розпізнаний текст в PartsList:', text);
+        console.log('Отримана інформація про запчастину:', partInfo);
+        
+        // Якщо отримано артикул, шукаємо за ним
+        if (text) {
+          handleSearch(text);
+        }
+        
+        // Якщо отримано повну інформацію про запчастину, можна додати додаткову логіку
+        if (partInfo && partInfo.manufacturer) {
+          // Наприклад, можна шукати за виробником або категорією
+          // handleSearch(partInfo.manufacturer);
+        }
       }
     });
   };

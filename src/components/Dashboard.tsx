@@ -77,20 +77,30 @@ const Dashboard: React.FC = () => {
         <Text style={styles.sectionTitle}>Швидкий доступ</Text>
         <View style={styles.quickAccessContainer}>
           {renderQuickAccessButton('add-circle-outline', 'Додати запчастину', 
-            () => navigation.navigate('PartForm', {}))}
+            () => navigation.navigate('PartForm' as any))}
           {renderQuickAccessButton('search-outline', 'Пошук', 
-            () => navigation.navigate('PartsList'))}
+            () => navigation.navigate('PartsList' as any))}
           {renderQuickAccessButton('camera-outline', 'Сканувати', 
-            () => navigation.navigate('CameraScanner', { 
-              onTextRecognized: (text) => {
-                navigation.navigate('PartForm', { 
-                  initialPart: { articleNumber: text } as any 
-                });
+            () => navigation.navigate('CameraScanner' as any, { 
+              onTextRecognized: (text: string, partInfo?: Partial<Part>) => {
+                console.log('Отримано дані з розпізнавання в Dashboard:', text, partInfo);
+                
+                // Якщо отримано всю інформацію про запчастину
+                if (partInfo) {
+                  navigation.navigate('PartForm', { 
+                    initialPart: partInfo 
+                  });
+                } else {
+                  // Якщо отримано тільки артикул
+                  navigation.navigate('PartForm', { 
+                    initialPart: { articleNumber: text } as any 
+                  });
+                }
               }
             }), 
             colors.secondary)}
           {renderQuickAccessButton('list-outline', 'Всі запчастини', 
-            () => navigation.navigate('PartsList'))}
+            () => navigation.navigate('PartsList' as any))}
           {renderQuickAccessButton('save-outline', 'Резервне копіювання', 
             () => setShowBackupManager(true),
             colors.success)}

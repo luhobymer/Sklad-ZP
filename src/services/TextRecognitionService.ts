@@ -56,6 +56,12 @@ export class TextRecognitionService {
       
       console.log('Зображення оптимізовано:', manipResult.uri);
       
+      // Для тестування в Expo Go використовуємо тестові дані
+      if (__DEV__) {
+        console.log('Розробницький режим: повертаємо тестові дані для розпізнавання тексту');
+        return 'ТЕСТОВИЙ ТЕКСТ\nАртикул: ABC-123456\nНазва: Гальмівні колодки\nВиробник: BREMBO';
+      }
+      
       // Використовуємо Google Cloud Vision API для розпізнавання тексту
       // Це найбільш надійний спосіб для розпізнавання тексту в мобільному додатку
       const apiKey = 'AIzaSyBVvrJLaUvkUd-DhAWxs8LPPWVN_8tQGkI'; // Це демо-ключ, для реального додатку потрібно використовувати власний
@@ -147,9 +153,12 @@ export class TextRecognitionService {
   }
 
   public async extractPartInfo(text: string): Promise<Partial<Part>> {
+    console.log('Початок вилучення інформації про запчастину з тексту:', text.substring(0, 100) + '...');
     const partInfo: Partial<Part> = {};
     
+    // Перевірка на тестові дані
     if (text === 'Розпізнавання тексту недоступне') {
+      console.log('Використовуємо демо-дані для запчастини');
       partInfo.articleNumber = 'DEMO-12345';
       partInfo.name = 'Демо запчастина';
       partInfo.manufacturer = 'DEMO';
@@ -158,7 +167,45 @@ export class TextRecognitionService {
       return partInfo;
     }
     
+    // Перевірка на тестові дані в режимі розробки
+    if (text.includes('ТЕСТОВИЙ ТЕКСТ')) {
+      console.log('Знайдено тестові дані, використовуємо їх для створення запчастини');
+      
+      // Шукаємо артикул в тестових даних
+      const articleMatch = text.match(/Артикул:\s*([A-Z0-9][-A-Z0-9]{4,14})/i);
+      if (articleMatch && articleMatch[1]) {
+        partInfo.articleNumber = articleMatch[1];
+        console.log('Знайдено артикул:', partInfo.articleNumber);
+      } else {
+        partInfo.articleNumber = 'TEST-123';
+      }
+      
+      // Шукаємо назву в тестових даних
+      const nameMatch = text.match(/Назва:\s*([^\n]+)/i);
+      if (nameMatch && nameMatch[1]) {
+        partInfo.name = nameMatch[1].trim();
+        console.log('Знайдено назву:', partInfo.name);
+      } else {
+        partInfo.name = 'Тестова запчастина';
+      }
+      
+      // Шукаємо виробника в тестових даних
+      const manufacturerMatch = text.match(/Виробник:\s*([^\n]+)/i);
+      if (manufacturerMatch && manufacturerMatch[1]) {
+        partInfo.manufacturer = manufacturerMatch[1].trim();
+        console.log('Знайдено виробника:', partInfo.manufacturer);
+      } else {
+        partInfo.manufacturer = 'TEST';
+      }
+      
+      partInfo.price = 1000;
+      partInfo.category = 'гальма';
+      
+      return partInfo;
+    }
+    
     const lines = text.split('\n');
+    console.log('Розділено текст на', lines.length, 'рядків');
 
     // Пошук артикула (формат: літери та цифри, можливо з дефісом)
     const articlePattern = /[A-Z0-9][-A-Z0-9]{4,14}/i;
@@ -166,6 +213,7 @@ export class TextRecognitionService {
       const articleMatch = line.match(articlePattern);
       if (articleMatch) {
         partInfo.articleNumber = articleMatch[0];
+        console.log('Знайдено артикул:', partInfo.articleNumber);
         break;
       }
     }
@@ -176,6 +224,7 @@ export class TextRecognitionService {
       const nameMatch = line.match(namePattern);
       if (nameMatch && !partInfo.name) {
         partInfo.name = nameMatch[0].trim();
+        console.log('Знайдено назву:', partInfo.name);
       }
     }
 
@@ -185,6 +234,7 @@ export class TextRecognitionService {
       const manufacturerMatch = line.match(manufacturerPattern);
       if (manufacturerMatch && !line.includes(partInfo.articleNumber || '')) {
         partInfo.manufacturer = manufacturerMatch[0].trim();
+        console.log('Знайдено виробника:', partInfo.manufacturer);
         break;
       }
     }
@@ -195,6 +245,7 @@ export class TextRecognitionService {
       const priceMatch = line.match(pricePattern);
       if (priceMatch) {
         partInfo.price = parseFloat(priceMatch[1].replace(',', '.'));
+        console.log('Знайдено ціну:', partInfo.price);
         break;
       }
     }
@@ -205,10 +256,24 @@ export class TextRecognitionService {
       const categoryMatch = line.match(categoryPattern);
       if (categoryMatch) {
         partInfo.category = categoryMatch[0].toLowerCase();
+        console.log('Знайдено категорію:', partInfo.category);
         break;
       }
     }
+    
+    // Якщо не знайдено артикул, використовуємо тимчасовий
+    if (!partInfo.articleNumber) {
+      partInfo.articleNumber = 'TEMP-' + Math.floor(Math.random() * 10000);
+      console.log('Створено тимчасовий артикул:', partInfo.articleNumber);
+    }
+    
+    // Якщо не знайдено назву, використовуємо тимчасову
+    if (!partInfo.name) {
+      partInfo.name = 'Запчастина без назви';
+      console.log('Встановлено назву за замовчуванням:', partInfo.name);
+    }
 
+    console.log('Результат вилучення інформації:', partInfo);
     return partInfo;
   }
 

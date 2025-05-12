@@ -64,9 +64,11 @@ const CameraScanner: React.FC<CameraScannerScreenProps> = ({ route, navigation }
       // Витягуємо інформацію про запчастину з розпізнаного тексту
       const partInfo = await textRecognitionService.extractPartInfo(text);
       
+      console.log('Отримана інформація про запчастину:', partInfo);
+      
       if (partInfo.articleNumber) {
-        // Передаємо артикул назад у додаток
-        onTextRecognized(partInfo.articleNumber);
+        // Передаємо всю інформацію про запчастину назад у додаток
+        onTextRecognized(partInfo.articleNumber, partInfo);
         navigation.goBack();
       }
     } catch (error) {
@@ -134,9 +136,22 @@ const CameraScanner: React.FC<CameraScannerScreenProps> = ({ route, navigation }
     setRecognizedText('');
   };
 
-  const handleUseText = () => {
-    onTextRecognized(recognizedText);
-    navigation.goBack();
+  const handleUseText = async () => {
+    try {
+      // Витягуємо інформацію про запчастину з розпізнаного тексту
+      const partInfo = await textRecognitionService.extractPartInfo(recognizedText);
+      console.log('Використання розпізнаного тексту:', recognizedText);
+      console.log('Вилучена інформація про запчастину:', partInfo);
+      
+      // Передаємо всю інформацію про запчастину
+      onTextRecognized(recognizedText, partInfo);
+      navigation.goBack();
+    } catch (error) {
+      console.error('Помилка при обробці тексту:', error);
+      // Якщо виникла помилка, передаємо тільки текст
+      onTextRecognized(recognizedText);
+      navigation.goBack();
+    }
   };
 
   const handleClose = () => {

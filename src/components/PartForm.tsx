@@ -90,8 +90,21 @@ const PartForm: React.FC<PartFormScreenProps> = ({ route, navigation }) => {
       if (hasPermission) {
         // Замість відображення камери в цьому компоненті, переходимо на екран CameraScanner
         navigation.navigate('CameraScanner', {
-          onTextRecognized: (text: string) => {
-            handleChange('articleNumber', text);
+          onTextRecognized: (text: string, partInfo?: Partial<Part>) => {
+            console.log('Отримано дані з розпізнавання:', text, partInfo);
+            
+            // Якщо отримано всю інформацію про запчастину
+            if (partInfo) {
+              // Заповнюємо всі поля форми
+              if (partInfo.articleNumber) handleChange('articleNumber', partInfo.articleNumber);
+              if (partInfo.name) handleChange('name', partInfo.name);
+              if (partInfo.manufacturer) handleChange('manufacturer', partInfo.manufacturer);
+              if (partInfo.price) handleChange('price', partInfo.price.toString());
+              if (partInfo.category) handleChange('category', partInfo.category);
+            } else {
+              // Якщо отримано тільки артикул
+              handleChange('articleNumber', text);
+            }
           }
         });
       } else {

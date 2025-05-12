@@ -18,7 +18,7 @@ export type RootStackParamList = {
   PartsList: { filter?: string };
   PartDetails: { part: Part; analogs?: Part[] };
   PartForm: { initialPart?: Partial<Part> };
-  CameraScanner: { onTextRecognized: (text: string) => void };
+  CameraScanner: { onTextRecognized: (text: string, partInfo?: Partial<Part>) => void };
   ViewHistory: undefined;
 };
 

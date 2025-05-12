@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, ErrorInfo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, LogBox } from 'react-native';
 import PartsList from './src/components/PartsList';
 import PartDetails from './src/components/PartDetails';
 import PartForm from './src/components/PartForm';
@@ -24,24 +24,52 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Ігноруємо деякі попередження, які можуть призводити до проблем
+LogBox.ignoreLogs([
+  'Require cycle:',
+  'ViewPropTypes will be removed',
+  'ColorPropType will be removed',
+]);
+
+// Встановлюємо обробник помилок для необроблених помилок
+const handleError = (error: Error, errorInfo: any) => {
+  console.log('Помилка в додатку:', error);
+  console.log('Додаткова інформація:', errorInfo);
+};
+
+// Використовуємо try-catch для всіх критичних операцій
+// Це допоможе запобігти неочікуваному закриттю додатку
+
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const initializeStorage = async () => {
       try {
+        console.log('Початок ініціалізації сховища');
         const storageService = FileStorageService.getInstance();
         await storageService.initialize();
+        console.log('Сховище ініціалізовано успішно');
         setIsLoading(false);
       } catch (error) {
         console.error('Помилка при ініціалізації сховища:', error);
+        setErrorMessage(error instanceof Error ? error.message : 'Невідома помилка');
         setHasError(true);
         setIsLoading(false);
       }
     };
 
-    initializeStorage();
+    // Обгортаємо в try-catch для додаткової безпеки
+    try {
+      initializeStorage();
+    } catch (error) {
+      console.error('Критична помилка при ініціалізації:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Критична помилка');
+      setHasError(true);
+      setIsLoading(false);
+    }
   }, []);
 
   if (isLoading) {
@@ -58,6 +86,7 @@ export default function App() {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Не вдалося ініціалізувати сховище даних.</Text>
         <Text style={styles.errorSubText}>Будь ласка, перезапустіть додаток.</Text>
+        {errorMessage ? <Text style={styles.errorDetails}>{errorMessage}</Text> : null}
       </View>
     );
   }
@@ -141,5 +170,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     textAlign: 'center',
+    marginBottom: 15,
+  },
+  errorDetails: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: 'rgba(255,0,0,0.05)',
+    borderRadius: 5,
+    width: '100%',
   },
 });

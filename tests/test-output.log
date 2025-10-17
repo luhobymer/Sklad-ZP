@@ -1,0 +1,61 @@
+  [2mconsole.log[22m
+    Початок виконання тестів FileStorageService
+[2m[22m
+[2m      [2mat Object.<anonymous> ([22m[2m[0m[36mtests/FileStorageService.test.ts[39m[0m[2m:9:9)[22m[2m[22m
+
+  [2mconsole.log[22m
+    Мокування expo-file-system завершено
+[2m[22m
+[2m      [2mat Object.<anonymous> ([22m[2m[0m[36mtests/FileStorageService.test.ts[39m[0m[2m:13:9)[22m[2m[22m
+
+[0m[7m[1m[31m FAIL [39m[22m[27m[0m [2mtests/[22m[1mFileStorageService.test.ts[22m
+  [1m● [22mTest suite failed to run
+
+    [1m[31mJest encountered an unexpected token[39m[22m
+
+    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript syntax, or when Jest is not configured to support such syntax.
+
+    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel configuration.
+
+    By default "node_modules" folder is ignored by transformers.
+
+    Here's what you can do:
+     • If you are trying to use ECMAScript Modules, see [4mhttps://jestjs.io/docs/ecmascript-modules[24m for how to enable it.
+     • If you are trying to use TypeScript, see [4mhttps://jestjs.io/docs/getting-started#using-typescript[24m
+     • To have some of your "node_modules" files transformed, you can specify a custom [1m"transformIgnorePatterns"[22m in your config.
+     • If you need a custom transformation specify a [1m"transform"[22m option in your config.
+     • If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the [1m"moduleNameMapper"[22m config option.
+
+    You'll find more details and examples of these config options in the docs:
+    [36mhttps://jestjs.io/docs/configuration[39m
+    For information about custom transformations, see:
+    [36mhttps://jestjs.io/docs/code-transformation[39m
+
+    [1m[31mDetails:[39m[22m
+
+    C:\Users\SANYA\Desktop\Sklad-ZP\node_modules\react-native\index.js:28
+    import typeof * as ReactNativePublicAPI from './index.js.flow';
+    ^^^^^^
+
+    SyntaxError: Cannot use import statement outside a module
+
+    [0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m'expo-file-system'[39m[33m;[39m
+     [90m   |[39m [31m[1m^[22m[39m
+     [90m 2 |[39m [36mimport[39m { [33mPart[39m } [36mfrom[39m [32m'../models/Part'[39m[33m;[39m
+     [90m 3 |[39m [36mimport[39m { [33mFileStorageServiceInterface[39m[33m,[39m [33mSearchParams[39m[33m,[39m [33mAnalogPart[39m } [36mfrom[39m [32m'../types/services'[39m[33m;[39m
+     [90m 4 |[39m [36mimport[39m { fileStorageLogger [36mas[39m logger } [36mfrom[39m [32m'../utils/logger'[39m[33m;[39m[0m
+
+      [2mat Runtime.createScriptFromCode ([22mnode_modules/jest-runtime/build/index.js[2m:1505:14)[22m
+      [2mat Object.<anonymous> ([22mnode_modules/expo-modules-core/src/Platform.ts[2m:1:1)[22m
+      [2mat Object.<anonymous> ([22mnode_modules/expo-modules-core/src/sweet/setUpErrorManager.fx.ts[2m:2:1)[22m
+      [2mat Object.<anonymous> ([22mnode_modules/expo-modules-core/src/index.ts[2m:1:1)[22m
+      [2mat Object.<anonymous> ([22mnode_modules/expo-file-system/src/FileSystem.ts[2m:1:1)[22m
+      [2mat Object.<anonymous> ([22mnode_modules/expo-file-system/src/index.ts[2m:1:1)[22m
+      [2mat Object.<anonymous> ([22msrc/services/FileStorageService.ts[2m:1:1)[22m
+      [2mat Object.<anonymous> ([22m[0m[36mtests/FileStorageService.test.ts[39m[0m[2m:16:1)[22m
+
+[1mTest Suites: [22m[1m[31m1 failed[39m[22m, 1 total
+[1mTests:       [22m0 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        2.455 s
+[2mRan all test suites[22m[2m matching [22m/tests\\FileStorageService.test.ts/i[2m.[22m

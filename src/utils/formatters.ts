@@ -31,4 +31,22 @@ export const formatDate = (date: Date | string): string => {
     hour: '2-digit',
     minute: '2-digit'
   });
-}; 
+};
+
+/**
+ * Форматує розмір файлу у зручному для читання форматі
+ * @param bytes Розмір файлу в байтах
+ * @param decimals Кількість знаків після коми (за замовчуванням 2)
+ * @returns Форматований рядок з розміром файлу
+ */
+export const formatFileSize = (bytes: number, decimals = 2): string => {
+  if (bytes === 0) return '0 Б';
+  
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};

@@ -1,10 +1,17 @@
-import FileStorageService from './FileStorageService';
+import fileStorageServiceInstance, { FileStorageService as FileStorageServiceType } from './FileStorageService';
 import { Part } from '../models/Part';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx'; 
+import jsPDF from 'jspdf'; 
 import 'jspdf-autotable';
+import { Logger } from '../utils/logger';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
+
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 export interface InventoryReport {
   totalParts: number;
@@ -33,11 +40,17 @@ export interface OperationHistoryReport {
 }
 
 export class ReportService {
+  private logger: Logger;
+// Створюємо логер для ReportService
+
+
+
   private static instance: ReportService;
-  private storageService: FileStorageService;
+  private storageService: FileStorageServiceType;
 
   private constructor() {
-    this.storageService = FileStorageService.getInstance();
+    this.storageService = fileStorageServiceInstance as any;
+    this.logger = Logger.getInstance({ prefix: 'ReportService' });
   }
 
   public static getInstance(): ReportService {
@@ -56,15 +69,15 @@ export class ReportService {
       const totalParts = allParts.length;
       
       // Загальна вартість запчастин
-      const totalValue = allParts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
+      const totalValue = allParts.reduce((sum: number, part: Part) => sum + (part.price * part.quantity), 0);
       
       // Запчастини з низьким запасом (менше 5)
-      const lowStockParts = allParts.filter(part => part.quantity <= 5);
+      const lowStockParts = allParts.filter((part: Part) => part.quantity <= 5);
       
       // Підсумок за категоріями
       const categorySummary: { [key: string]: { count: number; value: number } } = {};
       
-      allParts.forEach(part => {
+      allParts.forEach((part: Part) => {
         if (!categorySummary[part.category]) {
           categorySummary[part.category] = { count: 0, value: 0 };
         }
@@ -77,8 +90,8 @@ export class ReportService {
       const analogsSummary: { [key: string]: Part[] } = {};
       
       // Групуємо запчастини за назвою, але з різними виробниками
-      allParts.forEach(part => {
-        const similars = allParts.filter(p => 
+      allParts.forEach((part: Part) => {
+        const similars = allParts.filter((p: Part) => 
           p.name === part.name && p.manufacturer !== part.manufacturer
         );
         
@@ -96,7 +109,7 @@ export class ReportService {
         analogsSummary
       };
     } catch (error) {
-      console.error('Помилка при генерації звіту про інвентар:', error);
+      this.logger.error('Помилка при генерації звіту про інвентар:', error);
       throw error;
     }
   }
@@ -112,39 +125,31 @@ export class ReportService {
 
   public async exportReport(report: InventoryReport | OperationHistoryReport, format: 'csv' | 'pdf' | 'xlsx' = 'csv'): Promise<void> {
     try {
-      let fileName = `report_${new Date().toISOString()}.${format}`;
-      let filePath = `${FileSystem.documentDirectory}${fileName}`;
+      const fileName = `report_${new Date().toISOString()}.${format}`;
+      const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
       let content: string | Buffer;
 
       if (format === 'csv') {
         content = this.generateCSVContent(report);
-        await FileSystem.writeAsStringAsync(filePath, content, {
-          encoding: FileSystem.EncodingType.UTF8
-        });
+        await RNFS.writeFile(filePath, content, 'utf8');
       } else if (format === 'xlsx') {
         const workbook = XLSX.utils.book_new();
         const worksheet = this.generateXLSXWorksheet(report);
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Звіт');
-        content = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-        await FileSystem.writeAsStringAsync(filePath, content.toString('base64'), {
-          encoding: FileSystem.EncodingType.Base64
-        });
+        const xlsxContentBase64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+        await RNFS.writeFile(filePath, xlsxContentBase64, 'base64');
       } else if (format === 'pdf') {
         const doc = new jsPDF();
         this.generatePDFContent(doc, report);
-        content = doc.output();
-        await FileSystem.writeAsStringAsync(filePath, content, {
-          encoding: FileSystem.EncodingType.Base64
-        });
+        const pdfContentBase64 = doc.output('base64');
+        await RNFS.writeFile(filePath, pdfContentBase64, 'base64');
       }
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(filePath);
-      } else {
-        throw new Error('Функція поширення файлів недоступна на цьому пристрої');
-      }
+      // TODO: Перевірити кросплатформеність та обробку помилок для iOS/Android
+      await Share.open({ url: 'file://' + filePath });
+      this.logger.info(`Файл звіту збережено та відправлено на шарінг: ${filePath}`);
     } catch (error) {
-      console.error('Помилка при експорті звіту:', error);
+      this.logger.error('Помилка при експорті звіту:', error);
       throw error;
     }
   }
@@ -177,7 +182,7 @@ export class ReportService {
     return csvContent;
   }
 
-  private generateXLSXWorksheet(report: InventoryReport | OperationHistoryReport): XLSX.WorkSheet {
+  private generateXLSXWorksheet(report: InventoryReport | OperationHistoryReport): any {
     if ('operations' in report) {
       const data = report.operations.map(op => ({
         'Дата': op.date.toISOString(),
@@ -188,18 +193,18 @@ export class ReportService {
         'Клієнт': op.customer || '',
         'Деталі': op.details
       }));
-      return XLSX.utils.json_to_sheet(data);
-    } else {
-      const data = Object.entries(report.categorySummary).map(([category, data]) => ({
+    } else { // InventoryReport
+      const categoryData = Object.entries(report.categorySummary).map(([category, summaryData]) => ({
         'Категорія': category,
-        'Кількість': data.count,
-        'Вартість': data.value
+        'Кількість': summaryData.count,
+        'Вартість': summaryData.value
       }));
-      return XLSX.utils.json_to_sheet(data);
+      // TODO: Додати analogsSummary та salesStatistics, якщо потрібно, на цей або новий аркуш
+      return XLSX.utils.json_to_sheet(categoryData);
     }
   }
 
-  private generatePDFContent(doc: jsPDF, report: InventoryReport | OperationHistoryReport): void {
+  private generatePDFContent(doc: any, report: InventoryReport | OperationHistoryReport): void {
     doc.setFont('helvetica');
     doc.setFontSize(16);
     doc.text('Звіт', 14, 20);
@@ -251,3 +256,4 @@ export class ReportService {
     }
   }
 }
+// TODO: Додати нативний модуль для шарінгу файлів (наприклад, react-native-share)

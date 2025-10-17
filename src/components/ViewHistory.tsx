@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import SafeFlatList from './common/SafeFlatList';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing, typography } from '../theme/theme';
 import PartCard from './PartCard';
 import Button from './Button';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../types/navigation';
+import { Logger } from '../utils/logger';
+
+// Створюємо логер для ViewHistory
+const logger = new Logger({ prefix: 'ViewHistory' });
+
 
 type ViewHistoryScreenProps = NativeStackScreenProps<RootStackParamList, 'ViewHistory'>;
 
@@ -22,7 +28,7 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
   const loadViewHistory = async () => {
     try {
       setLoading(true);
-      const storageService = FileStorageService.getInstance();
+      const storageService = FileStorageService;
       
       if (!storageService) {
         Alert.alert('Помилка', 'Сховище недоступне');
@@ -32,7 +38,7 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
       const history = await storageService.getViewHistory();
       setHistoryItems(history);
     } catch (error) {
-      console.error('Помилка при завантаженні історії переглядів:', error);
+      logger.error('Помилка при завантаженні історії переглядів:', error);
       Alert.alert('Помилка', 'Не вдалося завантажити історію переглядів');
     } finally {
       setLoading(false);
@@ -42,7 +48,7 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
   const handleClearHistory = async () => {
     try {
       setLoading(true);
-      const storageService = FileStorageService.getInstance();
+      const storageService = FileStorageService;
       
       if (!storageService) {
         Alert.alert('Помилка', 'Сховище недоступне');
@@ -52,7 +58,7 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
       await storageService.clearViewHistory();
       setHistoryItems([]);
     } catch (error) {
-      console.error('Помилка при очищенні історії переглядів:', error);
+      logger.error('Помилка при очищенні історії переглядів:', error);
       Alert.alert('Помилка', 'Не вдалося очистити історію переглядів');
     } finally {
       setLoading(false);
@@ -60,7 +66,7 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
   };
 
   const handlePartSelect = (part: Part) => {
-    navigation.navigate('PartDetails', { part });
+    navigation.navigate('PartDetails', { partId: part.id });
   };
 
   const handleClose = () => {
@@ -81,8 +87,8 @@ const ViewHistory: React.FC<ViewHistoryScreenProps> = ({ navigation }) => {
           <Text style={styles.emptyText}>Історія переглядів порожня</Text>
         </View>
       ) : (
-        <FlatList
-          data={historyItems}
+        <SafeFlatList<Part>
+          data={Array.isArray(historyItems) ? historyItems : []}
           keyExtractor={(item) => item.id?.toString() || ''}
           renderItem={({ item }) => (
             <PartCard
@@ -123,11 +129,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.medium
+    marginBottom: spacing.medium,
   },
   title: {
     ...typography.h2,
-    color: colors.text
+    color: colors.text,
+    fontFamily: 'System',
+    fontWeight: '600' as const,
   },
   closeButton: {
     width: 30,
@@ -140,10 +148,12 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 16,
     color: colors.text,
-    fontWeight: 'bold'
+    fontWeight: 'bold' as const,
+    lineHeight: 16,
+    fontFamily: 'System',
   },
   listContent: {
-    padding: spacing.small
+    padding: spacing.small as number
   },
   emptyContainer: {
     flex: 1,
@@ -152,20 +162,24 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.body,
-    color: colors.textLight
+    color: colors.textLight,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: 'normal' as const,
+    fontFamily: 'System',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.medium
+    marginTop: spacing.medium as number
   },
   clearButton: {
     flex: 1,
-    marginRight: spacing.small / 2
+    marginRight: (spacing.small as number) / 2
   },
   closeBtn: {
     flex: 1,
-    marginLeft: spacing.small / 2
+    marginLeft: (spacing.small as number) / 2
   }
 });
 

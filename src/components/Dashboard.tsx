@@ -1,39 +1,50 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Part } from '../models/Part';
 import { colors } from '../theme/theme';
 import FileStorageService from '../services/FileStorageService';
 import PartCard from './PartCard';
-import { Ionicons } from '@expo/vector-icons';
+import SafeFlatList from './common/SafeFlatList';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import BackupManager from './BackupManager';
+import type { DashboardScreenProps } from '../types/navigation';
+import { Logger } from '../utils/logger';
+import { useFocusEffect } from '@react-navigation/native';
 
-type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+// Створюємо логер для Dashboard
+const logger = new Logger({ name: 'Dashboard' });
 
-const Dashboard: React.FC = () => {
-  const navigation = useNavigation<DashboardNavigationProp>();
+
+/**
+ * Головний екран додатка з доступом до основних функцій
+ */
+const Dashboard: React.FC<DashboardScreenProps> = ({ navigation }) => {
+  
   const [lowStockParts, setLowStockParts] = useState<Part[]>([]);
   const [recentParts, setRecentParts] = useState<Part[]>([]);
   const [showBackupManager, setShowBackupManager] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
   const storageService = FileStorageService.getInstance();
 
   useEffect(() => {
     // Завантажуємо дані при першому рендері
     loadData();
-    
-    // Додаємо слухач подій фокусу, щоб оновлювати дані при поверненні на екран
-    const unsubscribe = navigation.addListener('focus', () => {
-      console.log('Dashboard отримав фокус, оновлюємо дані');
-      loadData();
-    });
-    
-    // Видаляємо слухач при розмонтуванні компонента
-    return unsubscribe;
-  }, [navigation]);
+  }, []);
 
-  const loadData = async () => {
+  // Оновлюємо дані щоразу, коли екран отримує фокус (повернення з форм/деталей)
+  useFocusEffect(
+    React.useCallback(() => {
+      logger.info('Dashboard отримав фокус, оновлюємо дані');
+      loadData();
+    }, [])
+  );
+
+  /**
+   * Завантажує дані для відображення на дашборді
+   */
+  const [autoSeeded, setAutoSeeded] = useState(false);
+
+  const loadData = async (): Promise<void> => {
     try {
       // Отримуємо всі запчастини
       const allParts = await storageService.getAllParts();
@@ -47,11 +58,99 @@ const Dashboard: React.FC = () => {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
       setRecentParts(recent);
+
+      // Динамічні категорії
+      const uniqueCats = await storageService.getUniqueCategories();
+      setCategories(uniqueCats);
+
+      // DEBUG-блок вимкнено
+
+      // Авто-сідинг (одноразово за сесію) якщо дуже мало даних
+      if (!autoSeeded) {
+        const hasSeed = allParts.some(p => String(p.articleNumber).startsWith('TEST-SEED-'));
+        if (!hasSeed && allParts.length < 2) {
+          await handleSeedTestData();
+          setAutoSeeded(true);
+        }
+      }
     } catch (error) {
-      console.error('Помилка при завантаженні даних для дашборду:', error);
+      logger.error('Помилка при завантаженні даних для дашборду:', error);
     }
   };
 
+  const handleSeedTestData = async (): Promise<void> => {
+    try {
+      const all = await storageService.getAllParts();
+      // Щоб уникнути дублікатів, перевіримо за articleNumber
+      const existingArticles = new Set(all.map(p => p.articleNumber));
+      const samples = [
+        {
+          articleNumber: 'TEST-SEED-01',
+          name: 'Масляний фільтр',
+          manufacturer: 'Bosch',
+          category: 'Фільтри',
+          isNew: true,
+          quantity: 5,
+          price: 250,
+          description: 'Тестовий масляний фільтр',
+          photoPath: null as string | null,
+          compatibleCars: ['VW Golf', 'Skoda Octavia'],
+        },
+        {
+          articleNumber: 'TEST-SEED-02',
+          name: 'Гальмівні колодки',
+          manufacturer: 'TRW',
+          category: 'Гальма',
+          isNew: true,
+          quantity: 2,
+          price: 980,
+          description: 'Тестові колодки передні',
+          photoPath: null as string | null,
+          compatibleCars: ['Ford Focus'],
+        },
+        {
+          articleNumber: 'TEST-SEED-03',
+          name: 'Повітряний фільтр',
+          manufacturer: 'MANN',
+          category: 'Фільтри',
+          isNew: true,
+          quantity: 10,
+          price: 320,
+          description: 'Тестовий повітряний фільтр',
+          photoPath: null as string | null,
+          compatibleCars: ['Toyota Corolla'],
+        },
+      ];
+
+      let added = 0;
+      for (const s of samples) {
+        if (!existingArticles.has(s.articleNumber)) {
+          await storageService.addPart(s as any);
+          added += 1;
+        }
+      }
+      if (added > 0) {
+        logger.info(`Seeded ${added} parts for dashboard testing.`);
+        await loadData();
+        Alert.alert('Готово', `Додано ${added} тестових запчастин.`);
+      } else {
+        Alert.alert('Інформація', 'Тестові запчастини вже існують.');
+      }
+    } catch (e) {
+      logger.error('Помилка під час seed даних:', e);
+      Alert.alert('Помилка', 'Не вдалося додати тестові запчастини.');
+    }
+  };
+
+  // handleForceReload видалено (не використовується)
+
+  /**
+   * Рендерить кнопку швидкого доступу з іконкою та підписом
+   * @param icon Назва іконки з бібліотеки Ionicons
+   * @param label Текст підпису кнопки
+   * @param onPress Функція обробки натискання
+   * @param color Колір фону іконки (за замовчуванням - основний колір теми)
+   */
   const renderQuickAccessButton = (
     icon: string, 
     label: string, 
@@ -66,11 +165,17 @@ const Dashboard: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const handleBackupCreated = () => {
+  /**
+   * Обробник успішного створення резервної копії
+   */
+  const handleBackupCreated = (): void => {
     Alert.alert('Успіх', 'Резервну копію успішно створено');
   };
 
-  const handleBackupRestored = () => {
+  /**
+   * Обробник успішного відновлення даних з резервної копії
+   */
+  const handleBackupRestored = (): void => {
     Alert.alert('Успіх', 'Дані успішно відновлено');
     loadData(); // Оновлюємо дані після відновлення
   };
@@ -79,7 +184,20 @@ const Dashboard: React.FC = () => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Склад Автозапчастин</Text>
-        <Text style={styles.subtitle}>Домашній облік</Text>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('GoogleDrive')}
+            style={[styles.iconButton, { marginRight: 10 }]}
+          >
+            <Ionicons name="cloud-outline" size={24} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setShowBackupManager(true)}
+            style={styles.iconButton}
+          >
+            <Ionicons name="cloud-upload" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Швидкий доступ */}
@@ -87,53 +205,63 @@ const Dashboard: React.FC = () => {
         <Text style={styles.sectionTitle}>Швидкий доступ</Text>
         <View style={styles.quickAccessContainer}>
           {renderQuickAccessButton('add-circle-outline', 'Додати запчастину', 
-            () => navigation.navigate('PartForm' as any))}
+            () => navigation.navigate('PartForm'))}
           {renderQuickAccessButton('search-outline', 'Пошук', 
-            () => navigation.navigate('PartsList' as any))}
-          {renderQuickAccessButton('camera-outline', 'Сканувати', 
-            () => navigation.navigate('CameraScanner' as any, { 
-              onTextRecognized: (text: string, partInfo?: Partial<Part>) => {
-                console.log('Отримано дані з розпізнавання в Dashboard:', text, partInfo);
-                
-                // Якщо отримано всю інформацію про запчастину
-                if (partInfo) {
-                  navigation.navigate('PartForm', { 
-                    initialPart: partInfo 
-                  });
-                } else {
-                  // Якщо отримано тільки артикул
-                  navigation.navigate('PartForm', { 
-                    initialPart: { articleNumber: text } as any 
-                  });
-                }
-              }
-            }), 
-            colors.secondary)}
+            () => navigation.navigate('PartsList'))}
+          {/* Кнопку сканування видалено */}
           {renderQuickAccessButton('list-outline', 'Всі запчастини', 
-            () => navigation.navigate('PartsList' as any))}
+            () => navigation.navigate('PartsList'))}
           {renderQuickAccessButton('save-outline', 'Резервне копіювання', 
             () => setShowBackupManager(true),
             colors.success)}
         </View>
       </View>
 
-      {/* Розділ "Запчастини, які закінчуються" прибрано на прохання користувача */}
+      {/* Запчастини з низьким залишком (реальні дані) */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Малий залишок</Text>
+        {lowStockParts.length > 0 ? (
+          <SafeFlatList<Part>
+            data={Array.isArray(lowStockParts) ? lowStockParts : []}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.lowStockItem}
+                onPress={() => navigation.navigate('PartDetails', { partId: item.id })}
+              >
+                <View style={styles.lowStockInfo}>
+                  <Text style={styles.lowStockName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.lowStockArticle}>{item.articleNumber} • {item.manufacturer}</Text>
+                </View>
+                <View style={styles.quantityContainer}>
+                  <Text style={styles.quantityText}>×{item.quantity}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.lowStockList}
+          />
+        ) : (
+          <Text style={styles.emptyText}>Немає позицій з малим залишком</Text>
+        )}
+      </View>
 
-      {/* Останні додані */}
+      {/* Останні додані (реальні дані) */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Останні додані</Text>
         {recentParts.length > 0 ? (
-          <FlatList
-            data={recentParts}
+          <SafeFlatList<Part>
+            data={Array.isArray(recentParts) ? recentParts : []}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => (
               <TouchableOpacity 
                 style={styles.recentPartCard}
-                onPress={() => navigation.navigate('PartDetails', { part: item })}
+                onPress={() => navigation.navigate('PartDetails', { partId: item.id })}
               >
                 <PartCard 
                   part={item} 
-                  onPress={() => navigation.navigate('PartDetails', { part: item })}
+                  onPress={() => navigation.navigate('PartDetails', { partId: item.id })}
                 />
               </TouchableOpacity>
             )}
@@ -146,21 +274,27 @@ const Dashboard: React.FC = () => {
         )}
       </View>
 
-      {/* Швидкі фільтри */}
+      {/* Швидкі фільтри (динамічні категорії) */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Швидкі фільтри</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer}>
-          {['Двигун', 'Гальма', 'Підвіска', 'Електрика', 'Кузов', 'Трансмісія', 'Охолодження'].map((category) => (
-            <TouchableOpacity 
-              key={category} 
-              style={styles.filterButton}
-              onPress={() => navigation.navigate('PartsList', { filter: category } as any)}
-            >
-              <Text style={styles.filterText}>{category}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {categories.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer}>
+            {categories.map((category) => (
+              <TouchableOpacity 
+                key={category} 
+                style={styles.filterButton}
+                onPress={() => navigation.navigate('PartsList', { category })}
+              >
+                <Text style={styles.filterText}>{category}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.emptyText}>Категорій поки немає</Text>
+        )}
       </View>
+
+      {/* DEBUG: приховано у продакшн/стабільній збірці */}
 
       {/* Менеджер резервних копій */}
       <BackupManager
@@ -179,22 +313,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    padding: 20,
-    backgroundColor: colors.primary,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+  },
+  iconButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.text,
     marginBottom: 5,
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.textLight,
   },
   section: {
     marginBottom: 20,

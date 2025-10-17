@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, StyleSheet, TextInput, Text, TouchableOpacity, Alert, Switch, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, RefreshControl } from 'react-native';
+
+import Modal from 'react-native-modal';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing } from '../theme/theme';
@@ -7,25 +9,40 @@ import Card from './Card';
 import Button from './Button';
 import QuickActions from './QuickActions';
 import AdvancedSearchNew from './AdvancedSearchNew';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
-import { Ionicons } from '@expo/vector-icons';
+import CarSearchView from './CarSearchView';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import type { PartsListScreenProps } from '../types/navigation';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+import { Logger } from '../utils/logger';
+import { Switch } from 'react-native-switch';
+import OptimizedImage from './OptimizedImage';
 
-type PartsListScreenProps = NativeStackScreenProps<RootStackParamList, 'PartsList'>;
+// Створюємо логер для PartsList
+const logger = new Logger({ name: 'PartsList' });
+
+/**
+ * Компонент списку запчастин з можливістю пошуку та фільтрації
+ */
 
 const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
   const [parts, setParts] = useState<Part[]>([]);
   const [filteredParts, setFilteredParts] = useState<Part[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showCarSearch, setShowCarSearch] = useState(false);
   const [storageError, setStorageError] = useState<boolean>(false);
   const [simpleMode, setSimpleMode] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<string | null>(route.params?.filter || null);
+  const [activeFilter, setActiveFilter] = useState<string | null>(route.params?.filterType || null);
 
+  /**
+   * Ефект для ініціалізації сховища при монтуванні компонента
+   */
   useEffect(() => {
     // Перевіряємо можливість роботи з файловим сховищем
-    const initializeStorage = async () => {
+    const initializeStorage = async (): Promise<void> => {
       try {
         setLoading(true);
         const storageService = FileStorageService.getInstance();
@@ -33,7 +50,7 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
         setStorageError(false);
         await loadParts();
       } catch (error) {
-        console.error('Помилка при ініціалізації сховища:', error);
+        logger.error('Помилка при ініціалізації сховища:', error);
         setStorageError(true);
         Alert.alert(
           "Помилка сховища",
@@ -48,7 +65,10 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
     initializeStorage();
   }, []);
 
-  const loadParts = async () => {
+  /**
+   * Завантажує всі запчастини зі сховища
+   */
+  const loadParts = async (): Promise<void> => {
     if (storageError) return;
     
     try {
@@ -56,21 +76,39 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
       const storageService = FileStorageService.getInstance();
       const loadedParts = await storageService.getAllParts();
       setParts(loadedParts);
-      applyFilters(loadedParts, activeFilter);
+      // Оновлюємо унікальні категорії зі сховища
+      if (typeof storageService.getUniqueCategories === 'function') {
+        try {
+          const uniq = await (storageService as unknown as { getUniqueCategories: () => Promise<string[]> }).getUniqueCategories();
+          setCategories(uniq);
+        } catch (e) {
+          logger.warn('Не вдалося отримати унікальні категорії:', e);
+        }
+      } else {
+        // Fallback: обчислити з поточного списку
+        const uniq = Array.from(new Set(loadedParts.map(p => (p.category || '').trim()))).filter(Boolean);
+        setCategories(uniq);
+      }
+      applyFilters(loadedParts, activeFilter, searchQuery);
     } catch (error) {
-      console.error('Помилка при завантаженні запчастин:', error);
+      logger.error('Помилка при завантаженні запчастин:', error);
       Alert.alert("Помилка", "Не вдалося завантажити запчастини");
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = (partsToFilter: Part[], categoryFilter: string | null) => {
+  /**
+   * Застосовує фільтри до списку запчастин
+   * @param partsToFilter Список запчастин для фільтрації
+   * @param categoryFilter Категорія для фільтрації
+   */
+  const applyFilters = (partsToFilter: Part[], categoryFilter: string | null, query: string): void => {
     let result = [...partsToFilter];
     
     // Застосовуємо фільтр за категорією, якщо він вказаний
     if (categoryFilter) {
-      console.log('Застосовуємо фільтр за категорією:', categoryFilter);
+      logger.info('Застосовуємо фільтр за категорією:', categoryFilter);
       
       // Фільтруємо за точною категорією, а не за частиною тексту
       result = result.filter(part => {
@@ -83,83 +121,117 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
         return normalizedPartCategory === normalizedFilterCategory;
       });
       
-      console.log('Знайдено запчастин за категорією:', result.length);
+      logger.info('Знайдено запчастин за категорією:', result.length);
     }
     
     // Застосовуємо пошуковий запит, якщо він є
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (query) {
+      const q = query.toLowerCase();
       result = result.filter(part => 
-        part.name.toLowerCase().includes(query) ||
-        part.articleNumber.toLowerCase().includes(query) ||
-        part.manufacturer.toLowerCase().includes(query) ||
-        (part.description && part.description.toLowerCase().includes(query))
+        part.name.toLowerCase().includes(q) ||
+        part.articleNumber.toLowerCase().includes(q) ||
+        part.manufacturer.toLowerCase().includes(q) ||
+        (part.description && part.description.toLowerCase().includes(q))
       );
     }
     
     setFilteredParts(result);
   };
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    applyFilters(parts, activeFilter);
+  /**
+   * Обробник пошуку за текстом
+   * @param text Текст для пошуку
+   */
+  const handleSearch = (text: string): void => {
+    setSearchQuery(text);
   };
 
-  const handleCategoryFilter = (category: string | null) => {
+  /**
+   * Фільтрує запчастини за категорією
+   * @param category Категорія для фільтрації
+   */
+  /**
+   * Фільтрує запчастини за категорією
+   * @param category Категорія для фільтрації
+   */
+  const handleCategoryFilter = (category: string | null): void => {
     setActiveFilter(category);
-    applyFilters(parts, category);
   };
   
-  // Обробка результатів розширеного пошуку
-  const handleAdvancedSearchResults = (results: Part[]) => {
+  /**
+   * Обробник результатів розширеного пошуку
+   * @param results Результати пошуку (масив запчастин)
+   */
+  const handleAdvancedSearch = (results: Part[]): void => {
     setParts(results);
-    applyFilters(results, activeFilter);
   };
   
-  // Обробка знайденої запчастини через швидкий пошук
-  const handlePartSelect = (part: Part) => {
-    navigation.navigate('PartDetails', { part });
+  /**
+   * Обробник знайденої запчастини
+   * @param part Знайдена запчастина
+   */
+  const handlePartFound = (part: Part): void => {
+    navigation.navigate('PartDetails', { partId: part.id });
   };
   
-  // Оновлення списку після швидкого додавання
-  const handlePartAdded = () => {
+  /**
+   * Оновлення списку після швидкого додавання
+   * @param part Додана запчастина
+   */
+  const handlePartAdded = (_part?: Part): void => {
     loadParts();
   };
 
-  const handleAddPart = () => {
+  // Перераховуємо фільтри при будь-якій зміні залежностей
+  useEffect(() => {
+    applyFilters(parts, activeFilter, searchQuery);
+  }, [parts, activeFilter, searchQuery]);
+
+  // Перечитуємо список при фокусі екрана
+  useFocusEffect(
+    useCallback(() => {
+      loadParts();
+      // нічого не відписуємось
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      return () => {};
+    }, [])
+  );
+
+  const handleAddPart = (): void => {
     navigation.navigate('PartForm', {});
   };
 
-  const handleOpenScanner = () => {
-    navigation.navigate('CameraScanner', {
-      onTextRecognized: (text: string, partInfo?: Partial<Part>) => {
-        // Обробка розпізнаного тексту після повернення з CameraScanner
-        console.log('Розпізнаний текст в PartsList:', text);
-        console.log('Отримана інформація про запчастину:', partInfo);
-        
-        // Якщо отримано артикул, шукаємо за ним
-        if (text) {
-          handleSearch(text);
-        }
-        
-        // Якщо отримано повну інформацію про запчастину, можна додати додаткову логіку
-        if (partInfo && partInfo.manufacturer) {
-          // Наприклад, можна шукати за виробником або категорією
-          // handleSearch(partInfo.manufacturer);
-        }
-      }
-    });
-  };
+  // Видалено: логіка відкриття сканера камери та пов'язані виклики навігації
 
-  const handleOpenHistory = () => {
+  /**
+   * Відкриває історію переглядів
+   */
+  const handleOpenHistory = (): void => {
     navigation.navigate('ViewHistory');
   };
+
+
 
   const renderSimpleItem = ({ item }: { item: Part }) => (
     <TouchableOpacity
       style={styles.simpleCard}
-      onPress={() => navigation.navigate('PartDetails', { part: item })}
+      onPress={() => navigation.navigate('PartDetails', { partId: item.id })}
     >
+      {item.photoPath && (
+        <OptimizedImage
+          uri={item.photoPath}
+          style={styles.simpleCardImage}
+          width={50}
+          height={50}
+          resizeMode="cover"
+          optimizationOptions={{
+            thumbnailWidth: 100,
+            thumbnailHeight: 100,
+            quality: 70
+          }}
+          showPlaceholder={false}
+        />
+      )}
       <View style={styles.simpleCardContent}>
         <Text style={styles.simpleArticleNumber}>{item.articleNumber}</Text>
         <Text style={styles.simpleName} numberOfLines={1}>{item.name}</Text>
@@ -174,18 +246,35 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
   const renderDetailedItem = ({ item }: { item: Part }) => (
     <Card
       style={styles.card}
-      onPress={() => navigation.navigate('PartDetails', { part: item })}
+      onPress={() => navigation.navigate('PartDetails', { partId: item.id })}
     >
-      <View style={styles.partInfo}>
-        <View style={styles.header}>
-          <Text style={styles.articleNumber}>{item.articleNumber}</Text>
-          {item.isNew && <Text style={styles.newBadge}>Нова</Text>}
-        </View>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.manufacturer}>{item.manufacturer}</Text>
-        <View style={styles.footer}>
-          <Text style={styles.price}>{item.price} ₴</Text>
-          <Text style={styles.quantity}>Кількість: {item.quantity}</Text>
+      <View style={styles.detailedCardContainer}>
+        {item.photoPath && (
+          <OptimizedImage
+            uri={item.photoPath}
+            style={styles.detailedCardImage}
+            width={80}
+            height={80}
+            resizeMode="cover"
+            optimizationOptions={{
+              thumbnailWidth: 160,
+              thumbnailHeight: 160,
+              quality: 75
+            }}
+            showPlaceholder={false}
+          />
+        )}
+        <View style={styles.partInfo}>
+          <View style={styles.header}>
+            <Text style={styles.articleNumber}>{item.articleNumber}</Text>
+            {item.isNew && <Text style={styles.newBadge}>Нова</Text>}
+          </View>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={styles.manufacturer}>{item.manufacturer}</Text>
+          <View style={styles.footer}>
+            <Text style={styles.price}>{item.price} ₴</Text>
+            <Text style={styles.quantity}>Кількість: {item.quantity}</Text>
+          </View>
         </View>
       </View>
     </Card>
@@ -195,9 +284,8 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
     <View style={styles.container}>
       {/* Компонент швидких дій */}
       <QuickActions 
-        onPartFound={handlePartSelect}
+        onPartFound={handlePartFound}
         onPartAdded={handlePartAdded}
-        onOpenScanner={handleOpenScanner}
         onOpenHistory={handleOpenHistory}
       />
       
@@ -207,6 +295,12 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
           placeholder="Пошук запчастин..."
           value={searchQuery}
           onChangeText={handleSearch}
+        />
+        <Button
+          title="Авто"
+          onPress={() => setShowCarSearch(true)}
+          variant="secondary"
+          style={styles.carButton}
         />
         <Button
           title="Фільтри"
@@ -228,8 +322,8 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
         <Switch
           value={simpleMode}
           onValueChange={setSimpleMode}
-          trackColor={{ false: colors.border, true: colors.primary }}
-          thumbColor={colors.background}
+          
+          
         />
       </View>
       
@@ -242,62 +336,65 @@ const PartsList: React.FC<PartsListScreenProps> = ({ navigation, route }) => {
           >
             <Text style={[styles.categoryText, activeFilter === null && styles.activeCategoryText]}>Всі</Text>
           </TouchableOpacity>
-          {/* Використовуємо список категорій з перекладів */}
-          {['двигун', 'гальма', 'підвіска', 'електрика', 'кузов', 'трансмісія', 'інтер\'єр', 'інше'].map(category => {
-            // Отримуємо назву категорії з правильним відмінком для відображення
-            const displayName = (() => {
-              switch(category) {
-                case 'двигун': return 'Двигун';
-                case 'гальма': return 'Гальма';
-                case 'підвіска': return 'Підвіска';
-                case 'електрика': return 'Електрика';
-                case 'кузов': return 'Кузов';
-                case 'трансмісія': return 'Трансмісія';
-                case 'інтер\'єр': return 'Інтер\'єр';
-                case 'інше': return 'Інше';
-                default: return category;
-              }
-            })();
-            
-            return (
-              <TouchableOpacity 
-                key={category}
-                style={[styles.categoryButton, activeFilter === category && styles.activeCategoryButton]}
-                onPress={() => handleCategoryFilter(category)}
-              >
-                <Text style={[styles.categoryText, activeFilter === category && styles.activeCategoryText]}>{displayName}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {/* Динамічні категорії з локальної БД */}
+          {(Array.isArray(categories) ? categories : []).map(category => (
+            <TouchableOpacity 
+              key={category}
+              style={[styles.categoryButton, activeFilter === category && styles.activeCategoryButton]}
+              onPress={() => handleCategoryFilter(category)}
+            >
+              <Text style={[styles.categoryText, activeFilter === category && styles.activeCategoryText]}>{category}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
       
-      <FlatList
-        data={filteredParts}
-        renderItem={simpleMode ? renderSimpleItem : renderDetailedItem}
-        keyExtractor={(item) => item.id.toString()}
-        refreshing={loading}
-        onRefresh={loadParts}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
+      <ScrollView 
+        style={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={loadParts} />
+        }
+      >
+        {(Array.isArray(filteredParts) ? filteredParts : []).length > 0 ? (
+          (Array.isArray(filteredParts) ? filteredParts : []).map((item) => (
+            <View key={String(item.id)}>
+              {simpleMode ? renderSimpleItem({ item }) : renderDetailedItem({ item })}
+            </View>
+          ))
+        ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
               {loading ? "Завантаження..." : "Запчастини не знайдено"}
             </Text>
           </View>
-        }
-      />
+        )}
+      </ScrollView>
       
       {/* Модальне вікно розширеного пошуку */}
       <Modal
-        visible={showAdvancedSearch}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowAdvancedSearch(false)}
+        isVisible={showAdvancedSearch}
+        
+        
+        onBackdropPress={() => setShowAdvancedSearch(false)}
       >
         <AdvancedSearchNew 
-          onSearchResults={handleAdvancedSearchResults}
+          onSearchResults={handleAdvancedSearch}
           onClose={() => setShowAdvancedSearch(false)}
+        />
+      </Modal>
+
+      {/* Модальне вікно пошуку по автомобілях */}
+      <Modal
+        isVisible={showCarSearch}
+        onBackdropPress={() => setShowCarSearch(false)}
+      >
+        <CarSearchView
+          isVisible={showCarSearch}
+          onPartSelect={(part: Part) => {
+            setShowCarSearch(false);
+            navigation.navigate('PartDetails', { partId: part.id });
+          }}
+          onClose={() => setShowCarSearch(false)}
         />
       </Modal>
     </View>
@@ -322,6 +419,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surface
+  },
+  carButton: {
+    width: 60
   },
   filterButton: {
     width: 80
@@ -385,7 +485,18 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.md
   },
+  detailedCardContainer: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  detailedCardImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 6,
+    marginRight: spacing.md
+  },
   partInfo: {
+    flex: 1,
     gap: spacing.xs
   },
   header: {
@@ -441,6 +552,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderLeftWidth: 3,
     borderLeftColor: colors.primary
+  },
+  simpleCardImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 4,
+    marginRight: spacing.sm
   },
   simpleCardContent: {
     flex: 1

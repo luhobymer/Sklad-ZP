@@ -1,0 +1,42 @@
+diff --git a/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock b/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock
+new file mode 100644
+index 0000000..4fea315
+Binary files /dev/null and b/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock differ
+diff --git a/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/cache.properties b/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/cache.properties
+new file mode 100644
+index 0000000..0e05dca
+--- /dev/null
++++ b/node_modules/@react-native/gradle-plugin/.gradle/buildOutputCleanup/cache.properties
+@@ -0,0 +1,2 @@
++#Sat Jul 05 12:32:03 EEST 2025
++gradle.version=8.8
+diff --git a/node_modules/@react-native/gradle-plugin/build.gradle.kts b/node_modules/@react-native/gradle-plugin/build.gradle.kts
+index 9346508..fdd1f1a 100644
+--- a/node_modules/@react-native/gradle-plugin/build.gradle.kts
++++ b/node_modules/@react-native/gradle-plugin/build.gradle.kts
+@@ -5,9 +5,8 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
+-import org.gradle.api.internal.classpath.ModuleRegistry
+ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+-import org.gradle.configurationcache.extensions.serviceOf
++
+ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+ 
+ plugins {
+@@ -51,11 +50,9 @@ dependencies {
+ 
+   testRuntimeOnly(
+       files(
+-          serviceOf<ModuleRegistry>()
+-              .getModule("gradle-tooling-api-builders")
+-              .classpath
+-              .asFiles
+-              .first()))
++          project.gradle.sharedServices.getByName("gradle-tooling-api-builders")
++              .parameters
++              .get("gradle-tooling-api-builders")))
+ }
+ 
+ // We intentionally don't build for Java 17 as users will see a cryptic bytecode version

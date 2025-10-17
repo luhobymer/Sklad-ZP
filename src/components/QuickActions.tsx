@@ -1,37 +1,74 @@
-import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, Text, Alert, Modal, ScrollView } from 'react-native';
-import { Camera, CameraType } from 'expo-camera';
+import React, { useState, useCallback } from 'react';
+import { View, TextInput, StyleSheet, Text, Alert, ScrollView } from 'react-native';
+import Modal from 'react-native-modal';
+
+import { colors, spacing } from '../theme/theme';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
-import { CameraService } from '../services/CameraService';
-import { TextRecognitionService } from '../services/TextRecognitionService';
-import { colors, spacing } from '../theme/theme';
+
 import Button from './Button';
+import { Logger } from '../utils/logger';
+
+// Створюємо логер для QuickActions
+const logger = new Logger({ context: 'QuickActions' } as any);
+
+// Камерна функціональність видалена
+
+type QuickAddField = 'articleNumber' | 'name' | 'price' | 'quantity' | 'manufacturer' | 'category';
+
+interface QuickAddData {
+  articleNumber: string;
+  name: string;
+  price: string;
+  quantity: number;
+  manufacturer: string;
+  category: string;
+  isNew: boolean;
+  description: string;
+  photoPath: string;
+  compatibleCars: string[];
+}
 
 interface QuickActionsProps {
   onPartFound: (part: Part) => void;
   onPartAdded: () => void;
-  onOpenScanner?: () => void;
   onOpenHistory?: () => void;
 }
 
-const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, onOpenScanner, onOpenHistory }) => {
+const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, onOpenHistory }) => {
   const [searchArticle, setSearchArticle] = useState('');
-  const [showCamera, setShowCamera] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [quickAddData, setQuickAddData] = useState({
+  const [quickAddData, setQuickAddData] = useState<QuickAddData>({
     articleNumber: '',
     name: '',
     price: '',
-    quantity: '1',
+    quantity: 1,
     manufacturer: '',
-    category: ''
+    category: '',
+    isNew: true,
+    description: '',
+    photoPath: '',
+    compatibleCars: [],
   });
+  
+  const resetQuickAddForm = useCallback(() => {
+    setQuickAddData({
+      articleNumber: '',
+      name: '',
+      price: '',
+      quantity: 1,
+      manufacturer: '',
+      category: '',
+      isNew: true,
+      description: '',
+      photoPath: '',
+      compatibleCars: [],
+    });
+  }, []);
 
   const storageService = FileStorageService.getInstance();
-  const cameraService = CameraService.getInstance();
-  const textRecognitionService = TextRecognitionService.getInstance();
+  // Видалено: текстове розпізнавання через камеру
 
   // Швидкий пошук за артикулом
   const handleQuickSearch = async () => {
@@ -63,71 +100,14 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
         );
       }
     } catch (error) {
-      console.error('Помилка при швидкому пошуку:', error);
+      logger.error('Помилка при швидкому пошуку:', error);
       Alert.alert('Помилка', 'Не вдалося виконати пошук');
     } finally {
       setLoading(false);
     }
   };
 
-  // Сканування артикула через камеру
-  const handleScanArticle = async () => {
-    // Якщо передано функцію для відкриття сканера, використовуємо її
-    if (onOpenScanner) {
-      onOpenScanner();
-      return;
-    }
-    
-    // Інакше використовуємо вбудований функціонал
-    const hasPermission = await cameraService.requestPermissions();
-    if (hasPermission) {
-      setShowCamera(true);
-    } else {
-      Alert.alert('Помилка', 'Немає дозволу на використання камери');
-    }
-  };
-
-  // Обробка фото та розпізнавання тексту
-  const handleCameraCapture = async () => {
-    try {
-      setLoading(true);
-      const recognizedText = await cameraService.takePictureAndRecognizeText();
-      setShowCamera(false);
-      
-      if (recognizedText) {
-        // Спроба знайти артикул у розпізнаному тексті
-        const partInfo = await textRecognitionService.extractPartInfo(recognizedText);
-        
-        if (partInfo.articleNumber) {
-          setSearchArticle(partInfo.articleNumber);
-          // Автоматичний пошук після сканування
-          const part = await storageService.findByArticle(partInfo.articleNumber);
-          
-          if (part) {
-            onPartFound(part);
-          } else {
-            // Заповнюємо форму швидкого додавання даними з розпізнаного тексту
-            setQuickAddData({
-              articleNumber: partInfo.articleNumber || '',
-              name: partInfo.name || '',
-              price: partInfo.price ? partInfo.price.toString() : '',
-              quantity: '1',
-              manufacturer: partInfo.manufacturer || '',
-              category: partInfo.category || ''
-            });
-            setShowQuickAdd(true);
-          }
-        } else {
-          Alert.alert('Увага', 'Не вдалося розпізнати артикул. Спробуйте ще раз або введіть вручну.');
-        }
-      }
-    } catch (error) {
-      console.error('Помилка при скануванні:', error);
-      Alert.alert('Помилка', 'Не вдалося обробити зображення');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Видалено: обробка результатів з камери та встановлення полів із result.part
 
   // Швидке додавання запчастини
   const handleQuickAdd = async () => {
@@ -151,7 +131,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
         return;
       }
       
-      const quantity = parseInt(quickAddData.quantity);
+      const quantity = Number(quickAddData.quantity) || 0;
       if (isNaN(quantity) || quantity < 0) {
         Alert.alert('Помилка', 'Кількість має бути невід\'ємним числом');
         return;
@@ -175,18 +155,10 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
       await storageService.addPart(newPart);
       
       Alert.alert('Успіх', 'Запчастину успішно додано');
-      setShowQuickAdd(false);
-      setQuickAddData({
-        articleNumber: '',
-        name: '',
-        price: '',
-        quantity: '1',
-        manufacturer: '',
-        category: ''
-      });
+      resetQuickAddForm();
       onPartAdded();
     } catch (error) {
-      console.error('Помилка при швидкому додаванні:', error);
+      logger.error('Помилка при швидкому додаванні:', error);
       Alert.alert('Помилка', 'Не вдалося додати запчастину');
     } finally {
       setLoading(false);
@@ -194,9 +166,198 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
   };
 
   // Обробка зміни полів форми швидкого додавання
-  const handleQuickAddChange = (field: string, value: string) => {
-    setQuickAddData(prev => ({ ...prev, [field]: value }));
+  const handleQuickAddChange = (field: keyof QuickAddData, value: string | number | boolean | string[]) => {
+    setQuickAddData(prev => {
+      // Обробляємо спеціальні випадки для кожного типу даних
+      switch (field) {
+        case 'quantity':
+          return {
+            ...prev,
+            quantity: typeof value === 'number' ? value : parseInt(String(value), 10) || 0
+          };
+          
+        case 'price':
+          return {
+            ...prev,
+            price: typeof value === 'string' ? value.replace(/[^0-9.]/g, '') : String(value)
+          };
+          
+        case 'isNew':
+          return {
+            ...prev,
+            isNew: value === true
+          };
+          
+        case 'compatibleCars':
+          return {
+            ...prev,
+            compatibleCars: Array.isArray(value) ? value : []
+          };
+          
+        case 'articleNumber':
+        case 'name':
+        case 'manufacturer':
+        case 'category':
+        case 'description':
+        case 'photoPath':
+          return {
+            ...prev,
+            [field]: String(value)
+          };
+          
+        default:
+          return prev;
+      }
+    });
   };
+
+  
+  const handleSavePart = async () => {
+    try {
+      if (!quickAddData.articleNumber || !quickAddData.name) {
+        Alert.alert('Помилка', 'Будь ласка, заповніть обов\'язкові поля');
+        return;
+      }
+
+      // Створюємо нову запчастину з правильно типізованими даними
+      const newPart: Omit<Part, 'id'> = {
+        // Обов'язкові поля
+        articleNumber: quickAddData.articleNumber,
+        name: quickAddData.name,
+        price: typeof quickAddData.price === 'string' 
+          ? parseFloat(quickAddData.price) || 0 
+          : quickAddData.price,
+        quantity: typeof quickAddData.quantity === 'string' 
+          ? parseInt(quickAddData.quantity, 10) || 0 
+          : quickAddData.quantity,
+        manufacturer: quickAddData.manufacturer || '',
+        category: quickAddData.category || '',
+        // Додаткові поля зі значеннями за замовчуванням
+        isNew: quickAddData.isNew ?? true,
+        description: quickAddData.description || '',
+        photoPath: quickAddData.photoPath || '',
+        compatibleCars: Array.isArray(quickAddData.compatibleCars) 
+          ? quickAddData.compatibleCars 
+          : [],
+        // Службові поля
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await storageService.addPart(newPart);
+      setShowQuickAdd(false);
+      onPartAdded();
+      Alert.alert('Успішно', 'Запчастину успішно додано');
+    } catch (error) {
+      logger.error('Помилка при збереженні запчастини:', error);
+      Alert.alert('Помилка', 'Не вдалося зберегти запчастину');
+    }
+  };
+  
+  // Видалено: модалка камери та пов'язана логіка
+  
+  const renderQuickAddModal = () => (
+    <Modal
+      isVisible={showQuickAdd}
+      animationIn="slideInUp"
+      animationOut="slideOutDown"
+      onBackdropPress={() => setShowQuickAdd(false)}
+      style={styles.modal}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Швидке додавання запчастини</Text>
+          
+          <ScrollView>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Артикул *</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.articleNumber}
+                onChangeText={(value: string) => handleQuickAddChange('articleNumber', value)}
+                placeholder="Введіть артикул"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Назва *</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.name}
+                onChangeText={(value: string) => handleQuickAddChange('name', value)}
+                placeholder="Введіть назву"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Ціна</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.price}
+                onChangeText={(value: string) => handleQuickAddChange('price', value)}
+                keyboardType="numeric"
+                placeholder="Введіть ціну"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Кількість</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.quantity.toString()}
+                onChangeText={(value: string) => handleQuickAddChange('quantity', value)}
+                keyboardType="numeric"
+                placeholder="Введіть кількість"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Виробник</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.manufacturer}
+                onChangeText={(value: string) => handleQuickAddChange('manufacturer', value)}
+                placeholder="Введіть виробника"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Категорія</Text>
+              <TextInput
+                style={styles.input}
+                value={quickAddData.category}
+                onChangeText={(value: string) => handleQuickAddChange('category', value)}
+                placeholder="Введіть категорію"
+                placeholderTextColor="#999"
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalButtons}>
+            <Button
+              title="Скасувати"
+              onPress={() => setShowQuickAdd(false)}
+              variant="secondary"
+              style={styles.cancelButton}
+            />
+            <Button
+              title="Зберегти"
+              onPress={handleSavePart}
+              disabled={!quickAddData.articleNumber || !quickAddData.name}
+              style={styles.button}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <View style={styles.container}>
@@ -212,13 +373,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
           onPress={handleQuickSearch}
           variant="primary"
           style={styles.searchButton}
-          loading={loading}
-        />
-        <Button
-          title="Сканувати"
-          onPress={handleScanArticle}
-          variant="secondary"
-          style={styles.scanButton}
           loading={loading}
         />
       </View>
@@ -238,223 +392,115 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onPartFound, onPartAdded, o
         />
       </View>
 
-      {/* Модальне вікно камери */}
-      <Modal
-        visible={showCamera}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowCamera(false)}
-      >
-        <View style={styles.cameraContainer}>
-          {/* Використовуємо Camera як компонент */}
-          <View style={styles.camera}>
-            {/* Камера буде ініціалізована через CameraService */}
-            <View style={styles.cameraControls}>
-              <Button
-                title="Сканувати"
-                onPress={handleCameraCapture}
-                variant="primary"
-                style={styles.captureButton}
-                loading={loading}
-              />
-              <Button
-                title="Скасувати"
-                onPress={() => setShowCamera(false)}
-                variant="danger"
-                style={styles.cancelButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Модальне вікно швидкого додавання */}
-      <Modal
-        visible={showQuickAdd}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowQuickAdd(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Швидке додавання запчастини</Text>
-            
-            <ScrollView style={styles.formContainer}>
-              <Text style={styles.label}>Артикул *</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.articleNumber}
-                onChangeText={(value) => handleQuickAddChange('articleNumber', value)}
-                placeholder="Введіть артикул"
-              />
-              
-              <Text style={styles.label}>Назва *</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.name}
-                onChangeText={(value) => handleQuickAddChange('name', value)}
-                placeholder="Введіть назву"
-              />
-              
-              <Text style={styles.label}>Ціна *</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.price}
-                onChangeText={(value) => handleQuickAddChange('price', value)}
-                placeholder="Введіть ціну"
-                keyboardType="numeric"
-              />
-              
-              <Text style={styles.label}>Кількість *</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.quantity}
-                onChangeText={(value) => handleQuickAddChange('quantity', value)}
-                placeholder="Введіть кількість"
-                keyboardType="numeric"
-              />
-              
-              <Text style={styles.label}>Виробник</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.manufacturer}
-                onChangeText={(value) => handleQuickAddChange('manufacturer', value)}
-                placeholder="Введіть виробника"
-              />
-              
-              <Text style={styles.label}>Категорія</Text>
-              <TextInput
-                style={styles.input}
-                value={quickAddData.category}
-                onChangeText={(value) => handleQuickAddChange('category', value)}
-                placeholder="Введіть категорію"
-              />
-            </ScrollView>
-            
-            <View style={styles.modalButtons}>
-              <Button
-                title="Додати"
-                onPress={handleQuickAdd}
-                variant="primary"
-                style={styles.addButton}
-                loading={loading}
-              />
-              <Button
-                title="Скасувати"
-                onPress={() => setShowQuickAdd(false)}
-                variant="danger"
-                style={styles.cancelButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {renderQuickAddModal()}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.medium,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: colors.border,
+  captureButton: {
+    backgroundColor: colors.primary,
     borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.background,
+    padding: spacing.small,
+    alignItems: 'center',
+    marginVertical: spacing.small,
   },
   searchButton: {
-    marginLeft: spacing.sm,
-    height: 40,
-  },
-  scanButton: {
-    marginLeft: spacing.sm,
-    height: 40,
+    backgroundColor: colors.secondary,
+    borderRadius: 8,
+    padding: spacing.small,
+    alignItems: 'center',
+    marginVertical: spacing.small,
   },
   actionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    marginVertical: spacing.small,
   },
   actionButton: {
-    marginLeft: spacing.sm,
-  },
-  cameraContainer: {
     flex: 1,
+    marginHorizontal: spacing.xs,
   },
-  camera: {
-    flex: 1,
-  },
-  cameraControls: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  searchContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.small,
   },
-  captureButton: {
-    marginRight: spacing.sm,
-  },
-  cancelCameraButton: {
-    marginLeft: spacing.sm,
-  },
-  modalContainer: {
+  searchInput: {
     flex: 1,
+    marginRight: spacing.small,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.small,
+    backgroundColor: colors.background,
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.small,
+  },
+  button: {
+    flex: 1,
+    marginHorizontal: spacing.xs,
+  },
+  modal: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: spacing.medium,
+    marginHorizontal: spacing.medium,
   },
   modalContent: {
-    width: '90%',
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    padding: spacing.md,
-    maxHeight: '80%',
+    marginVertical: spacing.small,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: spacing.md,
-    textAlign: 'center',
+    marginBottom: spacing.small,
     color: colors.text,
   },
-  formContainer: {
-    maxHeight: 400,
-  },
-  label: {
-    fontSize: 14,
-    marginBottom: spacing.sm / 2,
-    color: colors.text,
+  inputGroup: {
+    marginBottom: spacing.small,
   },
   input: {
-    height: 40,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    marginBottom: spacing.sm,
+    padding: spacing.small,
+    marginBottom: spacing.small,
     backgroundColor: colors.background,
+  },
+  label: {
+    marginBottom: 4,
+    color: colors.text,
+    fontWeight: 'bold',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.md,
+    marginTop: spacing.small,
   },
   addButton: {
+    backgroundColor: colors.primary,
+    padding: spacing.small,
+    borderRadius: 8,
     flex: 1,
-    marginRight: spacing.sm / 2,
+    marginRight: spacing.xs,
+    alignItems: 'center',
   },
   cancelButton: {
+    backgroundColor: colors.error,
+    padding: spacing.small,
+    borderRadius: 8,
     flex: 1,
-    marginLeft: spacing.sm / 2,
+    marginLeft: spacing.xs,
+    alignItems: 'center',
   },
 });
 

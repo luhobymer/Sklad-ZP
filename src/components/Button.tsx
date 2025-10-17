@@ -1,16 +1,39 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+type AnyStyle = any; // Додаємо імпорт типів для стилів
 import { colors, spacing, typography } from '../theme/theme';
+
+type ButtonVariant = 'primary' | 'secondary' | 'danger';
+type ButtonSize = 'small' | 'medium' | 'large';
 
 interface ButtonProps {
   onPress: () => void;
   title: string;
-  variant?: 'primary' | 'secondary' | 'danger';
-  size?: 'small' | 'medium' | 'large';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: AnyStyle;
+  textStyle?: AnyStyle;
+}
+
+interface ButtonStyles {
+  button: AnyStyle;
+  buttonSmall: AnyStyle;
+  buttonMedium: AnyStyle;
+  buttonLarge: AnyStyle;
+  buttonPrimary: AnyStyle;
+  buttonSecondary: AnyStyle;
+  buttonDanger: AnyStyle;
+  buttonDisabled: AnyStyle;
+  text: AnyStyle;
+  textSmall: AnyStyle;
+  textMedium: AnyStyle;
+  textLarge: AnyStyle;
+  textPrimary: AnyStyle;
+  textSecondary: AnyStyle;
+  textDanger: AnyStyle;
+  textDisabled: AnyStyle;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -23,23 +46,26 @@ const Button: React.FC<ButtonProps> = ({
   style,
   textStyle
 }) => {
-  const buttonStyles = [
-    styles.button,
-    styles[`button${size.charAt(0).toUpperCase()}${size.slice(1)}`],
-    variant === 'primary' ? styles.buttonPrimary : 
-    variant === 'secondary' ? styles.buttonSecondary : styles.buttonDanger,
-    disabled && styles.buttonDisabled,
-    style
-  ];
+  const buttonStyles = StyleSheet.compose(
+    StyleSheet.compose(
+      StyleSheet.compose(
+        styles.button,
+        styles[`button${size.charAt(0).toUpperCase()}${size.slice(1)}` as keyof typeof styles]
+      ),
+      variant === 'primary' ? styles.buttonPrimary : 
+      variant === 'secondary' ? styles.buttonSecondary : styles.buttonDanger
+    ),
+    disabled ? styles.buttonDisabled : {}
+  ) as AnyStyle;
 
-  const textStyles = [
-    styles.text,
-    styles[`text${size.charAt(0).toUpperCase()}${size.slice(1)}`],
+  const textStyles = StyleSheet.compose(
+    StyleSheet.compose(
+      styles.text,
+      styles[`text${size.charAt(0).toUpperCase()}${size.slice(1)}` as keyof typeof styles]
+    ),
     variant === 'primary' ? styles.textPrimary : 
-    variant === 'secondary' ? styles.textSecondary : styles.textDanger,
-    disabled && styles.textDisabled,
-    textStyle
-  ];
+    variant === 'secondary' ? styles.textSecondary : styles.textDanger
+  ) as AnyStyle;
 
   return (
     <TouchableOpacity

@@ -1,21 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { Part } from '../models/Part';
 import { colors, spacing, typography } from '../theme/theme';
 
 interface PartCardProps {
   part: Part;
   onPress: () => void;
+  showImage?: boolean;
 }
 
-const PartCard: React.FC<PartCardProps> = ({ part, onPress }) => {
+const PartCard: React.FC<PartCardProps> = ({ part, onPress, showImage = true }) => {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
-      {part.photoPath && (
-        <Image 
-          source={{ uri: part.photoPath }} 
-          style={styles.image} 
-          resizeMode="cover" 
+      {showImage && part.photoPath && (
+        <FastImage 
+          source={{ 
+            uri: part.photoPath,
+            priority: FastImage.priority.normal,
+            cache: FastImage.cacheControl.immutable
+          }} 
+          style={styles.image}
+          resizeMode={FastImage.resizeMode.cover}
         />
       )}
       <View style={styles.content}>

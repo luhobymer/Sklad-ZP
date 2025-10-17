@@ -1,4 +1,11 @@
 {
-    "java.compile.nullAnalysis.mode": "automatic",
-    "java.configuration.updateBuildConfiguration": "automatic"
+    // Completely disable Java extension for this workspace to avoid init.gradle issues
+    "java.enabled": false,
+    "java.compile.nullAnalysis.mode": "disabled",
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "java.import.gradle.enabled": false,
+    "java.import.gradle.wrapper.enabled": false,
+    "java.server.launchMode": "Hybrid",
+    // Disable all Java language server features
+    "redhat.telemetry.enabled": false
 }

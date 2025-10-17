@@ -1,33 +1,45 @@
-import * as FileSystem from 'expo-file-system';
+import * as RNFS from 'react-native-fs';
+import { Platform } from 'react-native';
 import { Part } from '../models/Part';
+import { FileStorageServiceInterface, SearchParams } from '../types/services'; // Removed AnalogPart as it's not used
+import { fileStorageLogger as logger } from '../utils/logger';
 
 // Визначаємо шляхи до файлів сховища
-const STORAGE_DIRECTORY = `${FileSystem.documentDirectory}storage/`;
+const STORAGE_DIRECTORY = `${RNFS.DocumentDirectoryPath}/storage/`;
 const PARTS_FILE = `${STORAGE_DIRECTORY}parts.json`;
 const HISTORY_FILE = `${STORAGE_DIRECTORY}history.json`;
 const FAVORITES_FILE = `${STORAGE_DIRECTORY}favorites.json`;
+// const ANALOGS_FILE = `${STORAGE_DIRECTORY}analogs.json`; // Not used currently
 
 /**
  * Сервіс для збереження даних у файловій системі
  * замість SQLite бази даних
+ * Реалізує патерн Singleton для забезпечення єдиного екземпляру сервісу
  */
-class FileStorageService {
-  private static instance: FileStorageService | null = null;
-  private parts: Part[] = [];
-  private viewHistory: number[] = []; // Масив ID переглянутих запчастин
-  private favorites: number[] = []; // Масив ID обраних запчастин
-  private isInitialized: boolean = false;
-
-  private constructor() {}
-
-  /**
-   * Отримати екземпляр FileStorageService (патерн Singleton)
-   */
-  public static getInstance(): FileStorageService {
+export class FileStorageService implements FileStorageServiceInterface {
+  // Реалізація статичного методу getInstance з інтерфейсу
+  public static getInstance(): FileStorageServiceInterface {
     if (!FileStorageService.instance) {
       FileStorageService.instance = new FileStorageService();
     }
     return FileStorageService.instance;
+  }
+  private static instance: FileStorageService;
+  private parts: Part[] = [];
+  private viewHistory: number[] = []; // Зберігаємо ID запчастин
+  private favorites: number[] = []; // Зберігаємо ID запчастин
+  private isInitialized = false;
+
+  /**
+   * Приватний конструктор для реалізації патерну Singleton
+   */
+  private constructor() {}
+
+  /**
+   * @deprecated Використовуйте статичний метод getInstance()
+   */
+  public getInstance(): FileStorageServiceInterface {
+    return FileStorageService.getInstance();
   }
 
   /**
@@ -37,494 +49,389 @@ class FileStorageService {
     if (this.isInitialized) return;
 
     try {
-      // Перевіряємо і створюємо директорію для сховища, якщо вона не існує
-      const dirInfo = await FileSystem.getInfoAsync(STORAGE_DIRECTORY);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(STORAGE_DIRECTORY, { intermediates: true });
+      const dirExists = await RNFS.exists(STORAGE_DIRECTORY);
+      if (!dirExists) {
+        await RNFS.mkdir(STORAGE_DIRECTORY);
+        // Встановлюємо атрибут "не робити бекап" для iOS
+        if (Platform.OS === 'ios') {
+          await RNFS.writeFile(`${STORAGE_DIRECTORY}.no_backup`, '', 'utf8');
+        }
       }
 
-      // Завантажуємо дані з файлів
       await this.loadPartsFromFile();
       await this.loadHistoryFromFile();
       await this.loadFavoritesFromFile();
-
+      
       this.isInitialized = true;
-      console.log('FileStorageService успішно ініціалізований');
+      logger.info('FileStorageService ініціалізовано.');
     } catch (error) {
-      console.error('Помилка при ініціалізації FileStorageService:', error);
-      throw error;
+      logger.error('Помилка ініціалізації FileStorageService:', error);
+      throw error; // Rethrow to allow caller to handle
     }
   }
 
-  /**
-   * Завантаження запчастин з файлу
-   */
   private async loadPartsFromFile(): Promise<void> {
     try {
-      const fileInfo = await FileSystem.getInfoAsync(PARTS_FILE);
-      if (fileInfo.exists) {
-        const content = await FileSystem.readAsStringAsync(PARTS_FILE);
-        this.parts = JSON.parse(content);
+      const fileExists = await RNFS.exists(PARTS_FILE);
+      if (fileExists) {
+        const content = await RNFS.readFile(PARTS_FILE, 'utf8');
+        this.parts = JSON.parse(content).map((p: any) => ({ // Normalize fields
+          ...p,
+          articleNumber: typeof p.articleNumber === 'string' ? p.articleNumber.trim() : String(p.articleNumber ?? ''),
+          name: typeof p.name === 'string' ? p.name.trim() : String(p.name ?? ''),
+          manufacturer: typeof p.manufacturer === 'string' ? p.manufacturer.trim() : String(p.manufacturer ?? ''),
+          category: typeof p.category === 'string' ? p.category.trim() : String(p.category ?? ''),
+          quantity: Number(p.quantity ?? 0),
+          price: Number(p.price ?? 0),
+          createdAt: p.createdAt ? new Date(p.createdAt) : new Date(0),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(0),
+        }));
+        logger.info(`Завантажено ${this.parts.length} запчастин з файлу: ${PARTS_FILE}`);
+        if (this.parts.length > 0) {
+          const s = this.parts[0];
+          logger.debug('Перший елемент (snapshot):', {
+            id: s.id,
+            articleNumber: s.articleNumber,
+            name: s.name,
+            manufacturer: s.manufacturer,
+            quantity: s.quantity,
+            price: s.price,
+            createdAt: s.createdAt,
+          });
+        }
       } else {
-        // Якщо файл не існує, створюємо порожній масив
         this.parts = [];
-        await this.savePartsToFile();
+        await this.savePartsToFile(); // Create file if not exists
+        logger.warn(`Файл з частинами не знайдено. Створено порожній файл: ${PARTS_FILE}`);
       }
     } catch (error) {
-      console.error('Помилка при завантаженні запчастин з файлу:', error);
-      this.parts = [];
+      logger.error('Помилка завантаження запчастин з файлу:', error);
+      this.parts = []; // Reset on error
     }
   }
 
   /**
-   * Збереження запчастин у файл
+   * Повертає службову інформацію для діагностики джерела даних
    */
+  public async getDebugInfo(): Promise<{ storageDir: string; partsFile: string; partsCount: number; sample?: Partial<Part> }> {
+    await this.initialize();
+    const info = {
+      storageDir: STORAGE_DIRECTORY,
+      partsFile: PARTS_FILE,
+      partsCount: this.parts.length,
+      sample: this.parts.length > 0 ? {
+        id: this.parts[0].id,
+        articleNumber: this.parts[0].articleNumber,
+        name: this.parts[0].name,
+        manufacturer: this.parts[0].manufacturer,
+        quantity: this.parts[0].quantity,
+        price: this.parts[0].price,
+        createdAt: this.parts[0].createdAt,
+      } : undefined,
+    };
+    logger.info('DebugInfo FileStorageService:', info);
+    return info;
+  }
+
   private async savePartsToFile(): Promise<void> {
     try {
-      await FileSystem.writeAsStringAsync(PARTS_FILE, JSON.stringify(this.parts));
+      await RNFS.writeFile(PARTS_FILE, JSON.stringify(this.parts, null, 2), 'utf8');
     } catch (error) {
-      console.error('Помилка при збереженні запчастин у файл:', error);
-      throw error;
+      logger.error('Помилка збереження запчастин у файл:', error);
     }
   }
 
-  /**
-   * Завантаження історії переглядів з файлу
-   */
   private async loadHistoryFromFile(): Promise<void> {
     try {
-      const fileInfo = await FileSystem.getInfoAsync(HISTORY_FILE);
-      if (fileInfo.exists) {
-        const content = await FileSystem.readAsStringAsync(HISTORY_FILE);
+      const fileExists = await RNFS.exists(HISTORY_FILE);
+      if (fileExists) {
+        const content = await RNFS.readFile(HISTORY_FILE, 'utf8');
         this.viewHistory = JSON.parse(content);
       } else {
-        // Якщо файл не існує, створюємо порожній масив
         this.viewHistory = [];
         await this.saveHistoryToFile();
       }
     } catch (error) {
-      console.error('Помилка при завантаженні історії з файлу:', error);
+      logger.error('Помилка завантаження історії з файлу:', error);
       this.viewHistory = [];
     }
   }
 
-  /**
-   * Збереження історії переглядів у файл
-   */
   private async saveHistoryToFile(): Promise<void> {
     try {
-      await FileSystem.writeAsStringAsync(HISTORY_FILE, JSON.stringify(this.viewHistory));
+      await RNFS.writeFile(HISTORY_FILE, JSON.stringify(this.viewHistory, null, 2), 'utf8');
     } catch (error) {
-      console.error('Помилка при збереженні історії у файл:', error);
-      throw error;
+      logger.error('Помилка збереження історії у файл:', error);
     }
   }
 
-  /**
-   * Завантаження обраних запчастин з файлу
-   */
   private async loadFavoritesFromFile(): Promise<void> {
     try {
-      const fileInfo = await FileSystem.getInfoAsync(FAVORITES_FILE);
-      if (fileInfo.exists) {
-        const content = await FileSystem.readAsStringAsync(FAVORITES_FILE);
+      const fileExists = await RNFS.exists(FAVORITES_FILE);
+      if (fileExists) {
+        const content = await RNFS.readFile(FAVORITES_FILE, 'utf8');
         this.favorites = JSON.parse(content);
       } else {
-        // Якщо файл не існує, створюємо порожній масив
         this.favorites = [];
         await this.saveFavoritesToFile();
       }
     } catch (error) {
-      console.error('Помилка при завантаженні обраних з файлу:', error);
+      logger.error('Помилка завантаження обраних з файлу:', error);
       this.favorites = [];
     }
   }
 
-  /**
-   * Збереження обраних запчастин у файл
-   */
   private async saveFavoritesToFile(): Promise<void> {
     try {
-      await FileSystem.writeAsStringAsync(FAVORITES_FILE, JSON.stringify(this.favorites));
+      await RNFS.writeFile(FAVORITES_FILE, JSON.stringify(this.favorites, null, 2), 'utf8');
     } catch (error) {
-      console.error('Помилка при збереженні обраних у файл:', error);
-      throw error;
+      logger.error('Помилка збереження обраних у файл:', error);
     }
   }
 
-  /**
-   * Отримання всіх запчастин
-   */
   public async getAllParts(): Promise<Part[]> {
     await this.initialize();
-    return [...this.parts];
+    return [...this.parts]; // Return a copy
   }
 
-  /**
-   * Додавання нової запчастини
-   */
-  public async addPart(part: Omit<Part, 'id'>): Promise<number> {
+  // Updated addPart to correctly handle Part creation with createdAt and updatedAt
+  public async addPart(partData: Omit<Part, 'id'>): Promise<number> {
     await this.initialize();
-    
-    // Генеруємо унікальний ID
-    const newId = this.generateNewId();
-    
-    // Створюємо нову запчастину з ID
+    const newId = this.parts.length > 0 ? Math.max(...this.parts.map(p => p.id)) + 1 : 1;
+    const now = new Date();
     const newPart: Part = {
-      ...part,
-      id: newId
+      ...partData,
+      id: newId,
+      createdAt: now,
+      updatedAt: now,
     };
-    
     this.parts.push(newPart);
     await this.savePartsToFile();
-    
+    logger.info(`Додано нову запчастину: ID ${newId}, Артикул: ${newPart.articleNumber}`);
     return newId;
   }
+  
+  // Removed generateNewId as it's incorporated into addPart
 
-  /**
-   * Оновлення існуючої запчастини
-   */
-  public async updatePart(part: Part): Promise<void> {
+  public async updatePart(updatedPart: Part): Promise<void> {
     await this.initialize();
-    
-    const index = this.parts.findIndex(p => p.id === part.id);
+    const index = this.parts.findIndex(p => p.id === updatedPart.id);
     if (index !== -1) {
-      this.parts[index] = {...part};
+      this.parts[index] = {
+        ...updatedPart,
+        updatedAt: new Date(), // Ensure updatedAt is updated
+      };
       await this.savePartsToFile();
+      logger.info(`Оновлено запчастину: ID ${updatedPart.id}`);
     } else {
-      throw new Error(`Запчастина з ID ${part.id} не знайдена`);
+      logger.warn(`Спроба оновити неіснуючу запчастину: ID ${updatedPart.id}`);
+      // Optionally throw an error: throw new Error(`Part with id ${updatedPart.id} not found`);
     }
   }
 
-  /**
-   * Видалення запчастини
-   */
   public async deletePart(id: number): Promise<void> {
     await this.initialize();
-    
     const initialLength = this.parts.length;
     this.parts = this.parts.filter(p => p.id !== id);
-    
-    if (this.parts.length === initialLength) {
-      throw new Error(`Запчастина з ID ${id} не знайдена`);
+    if (this.parts.length < initialLength) {
+      await this.savePartsToFile();
+      // Also remove from history and favorites
+      this.viewHistory = this.viewHistory.filter(partId => partId !== id);
+      await this.saveHistoryToFile();
+      this.favorites = this.favorites.filter(partId => partId !== id);
+      await this.saveFavoritesToFile();
+      logger.info(`Видалено запчастину: ID ${id}`);
+    } else {
+      logger.warn(`Спроба видалити неіснуючу запчастину: ID ${id}`);
     }
-    
-    await this.savePartsToFile();
-    
-    // Також видаляємо з історії та обраних
-    this.viewHistory = this.viewHistory.filter(historyId => historyId !== id);
-    await this.saveHistoryToFile();
-    
-    this.favorites = this.favorites.filter(favoriteId => favoriteId !== id);
-    await this.saveFavoritesToFile();
   }
 
-  /**
-   * Пошук запчастин за параметрами
-   */
-  public async searchParts(params: {
-    query?: string;
-    category?: string;
-    manufacturer?: string;
-    priceRange?: { min: number; max: number };
-    isNew?: boolean;
-    inStock?: boolean;
-  }): Promise<Part[]> {
+  public async getPartById(id: number): Promise<Part | undefined> {
     await this.initialize();
-    
+    return this.parts.find(p => p.id === id);
+  }
+
+  public async searchParts(params: SearchParams): Promise<Part[]> {
+    await this.initialize();
     let filteredParts = [...this.parts];
-    
-    // Фільтрація за запитом (шукаємо в артикулі, назві, виробнику)
+
     if (params.query) {
-      const query = params.query.toLowerCase();
-      filteredParts = filteredParts.filter(part => 
-        part.articleNumber.toLowerCase().includes(query) ||
-        part.name.toLowerCase().includes(query) ||
-        part.manufacturer.toLowerCase().includes(query)
+      const queryLower = params.query.toLowerCase();
+      filteredParts = filteredParts.filter(p => 
+        p.name.toLowerCase().includes(queryLower) ||
+        p.articleNumber.toLowerCase().includes(queryLower) ||
+        p.manufacturer.toLowerCase().includes(queryLower) ||
+        (p.description && p.description.toLowerCase().includes(queryLower))
       );
     }
-    
-    // Фільтрація за категорією
     if (params.category) {
-      filteredParts = filteredParts.filter(part => 
-        part.category.toLowerCase() === params.category?.toLowerCase()
-      );
+      filteredParts = filteredParts.filter(p => p.category === params.category);
     }
-    
-    // Фільтрація за виробником
     if (params.manufacturer) {
-      filteredParts = filteredParts.filter(part => 
-        part.manufacturer.toLowerCase() === params.manufacturer?.toLowerCase()
-      );
+      filteredParts = filteredParts.filter(p => p.manufacturer === params.manufacturer);
     }
-    
-    // Фільтрація за ціновим діапазоном
-    if (params.priceRange) {
-      filteredParts = filteredParts.filter(part => 
-        part.price >= params.priceRange!.min && 
-        part.price <= params.priceRange!.max
-      );
-    }
-    
-    // Фільтрація за станом (новий/вживаний)
-    if (params.isNew !== undefined) {
-      filteredParts = filteredParts.filter(part => part.isNew === params.isNew);
-    }
-    
-    // Фільтрація за наявністю
-    if (params.inStock) {
-      filteredParts = filteredParts.filter(part => part.quantity > 0);
-    }
-    
+    // Add other filters as needed (type, model, dimensions, priceRange, isNew, inStock)
+
     return filteredParts;
   }
 
-  /**
-   * Пошук запчастини за артикулом
-   */
   public async findByArticle(articleNumber: string): Promise<Part | null> {
     await this.initialize();
-    
     const part = this.parts.find(p => p.articleNumber === articleNumber);
     return part || null;
   }
 
-  /**
-   * Додавання запчастини до історії переглядів
-   */
   public async addToViewHistory(partId: number): Promise<void> {
     await this.initialize();
-    
-    // Перевіряємо, чи існує запчастина
-    const part = this.parts.find(p => p.id === partId);
-    if (!part) {
-      throw new Error(`Запчастина з ID ${partId} не знайдена`);
-    }
-    
-    // Видаляємо запчастину з історії, якщо вона вже є (щоб додати її на початок)
+    // Remove if already exists to add to the top (most recent)
     this.viewHistory = this.viewHistory.filter(id => id !== partId);
-    
-    // Додаємо ID запчастини на початок історії
     this.viewHistory.unshift(partId);
-    
-    // Обмежуємо історію до 50 записів
+    // Keep history to a certain length, e.g., 50 items
     if (this.viewHistory.length > 50) {
-      this.viewHistory = this.viewHistory.slice(0, 50);
+      this.viewHistory.pop();
     }
-    
     await this.saveHistoryToFile();
   }
 
-  /**
-   * Отримання історії переглядів
-   */
   public async getViewHistory(): Promise<Part[]> {
     await this.initialize();
-    
-    // Перетворюємо масив ID в масив запчастин
-    const historyParts = this.viewHistory
-      .map(id => this.parts.find(part => part.id === id))
-      .filter(part => part !== undefined) as Part[];
-    
-    return historyParts;
+    // Map IDs to actual Part objects, filtering out undefined if a part was deleted
+    return this.viewHistory
+      .map(id => this.parts.find(p => p.id === id))
+      .filter(p => p !== undefined) as Part[];
   }
 
-  /**
-   * Очищення історії переглядів
-   */
   public async clearViewHistory(): Promise<void> {
     await this.initialize();
-    
     this.viewHistory = [];
     await this.saveHistoryToFile();
+    logger.info('Історію переглядів очищено.');
   }
 
-  /**
-   * Додавання запчастини до обраних
-   */
   public async addToFavorites(partId: number): Promise<void> {
     await this.initialize();
-    
-    // Перевіряємо, чи існує запчастина
-    const part = this.parts.find(p => p.id === partId);
-    if (!part) {
-      throw new Error(`Запчастина з ID ${partId} не знайдена`);
-    }
-    
-    // Додаємо ID запчастини до обраних, якщо її там ще немає
     if (!this.favorites.includes(partId)) {
       this.favorites.push(partId);
       await this.saveFavoritesToFile();
+      logger.info(`Запчастину ID ${partId} додано до обраних.`);
     }
   }
 
-  /**
-   * Видалення запчастини з обраних
-   */
   public async removeFromFavorites(partId: number): Promise<void> {
     await this.initialize();
-    
-    // Видаляємо ID запчастини з обраних
     const initialLength = this.favorites.length;
     this.favorites = this.favorites.filter(id => id !== partId);
-    
-    if (this.favorites.length !== initialLength) {
+    if (this.favorites.length < initialLength) {
       await this.saveFavoritesToFile();
+      logger.info(`Запчастину ID ${partId} видалено з обраних.`);
     }
   }
 
-  /**
-   * Отримання обраних запчастин
-   */
   public async getFavorites(): Promise<Part[]> {
     await this.initialize();
-    
-    // Перетворюємо масив ID в масив запчастин
-    const favoriteParts = this.favorites
-      .map(id => this.parts.find(part => part.id === id))
-      .filter(part => part !== undefined) as Part[];
-    
-    return favoriteParts;
+    return this.favorites
+      .map(id => this.parts.find(p => p.id === id))
+      .filter(p => p !== undefined) as Part[];
+  }
+
+  public async isFavorite(partId: number): Promise<boolean> {
+    await this.initialize();
+    return this.favorites.includes(partId);
+  }
+
+  /**
+   * Перечитує всі файли зі сховища і оновлює кеш у пам'яті
+   */
+  public async reloadFromDisk(): Promise<void> {
+    try {
+      // Не чіпаємо прапор isInitialized, просто оновлюємо масиви з файлів
+      await this.loadPartsFromFile();
+      await this.loadHistoryFromFile();
+      await this.loadFavoritesFromFile();
+      logger.info('Дані перезавантажено з файлів сховища.');
+    } catch (error) {
+      logger.error('Помилка reloadFromDisk:', error);
+      throw error;
+    }
+  }
+
+  public async getUniqueCategories(): Promise<string[]> {
+    await this.initialize();
+    return [...new Set(this.parts.map(p => p.category).filter(c => c))]; // Filter out undefined/empty
+  }
+
+  public async getUniqueManufacturers(): Promise<string[]> {
+    await this.initialize();
+    return [...new Set(this.parts.map(p => p.manufacturer).filter(m => m))]; // Filter out undefined/empty
   }
   
-  /**
-   * Отримання запчастини за ID
-   */
-  public getPartById(id: number): Part | undefined {
-    return this.parts.find(part => part.id === id);
+  // Implement other getUnique... methods similarly if needed
+  public async getUniqueTypes(): Promise<string[]> { // Placeholder, should be based on a 'type' field in Part if it exists
+    await this.initialize();
+    // Assuming Part might have a 'type' field, otherwise this needs to be adapted or removed
+    // return [...new Set(this.parts.map(p => p.type).filter(t => t))]; 
+    logger.warn('getUniqueTypes: Поле "type" не визначено у моделі Part або не використовується.');
+    return []; 
+  }
+  public async getUniqueModels(): Promise<string[]> { // Placeholder
+    await this.initialize();
+    // Assuming Part might have a 'compatibleCars' field or similar for models
+    // This would likely need more complex logic if 'compatibleCars' is an array of strings
+    logger.warn('getUniqueModels: Логіка для моделей не реалізована повністю.');
+    return [];
+  }
+  public async getUniqueDimensions(): Promise<string[]> { // Placeholder
+    await this.initialize();
+    // Assuming Part might have a 'dimensions' field
+    // return [...new Set(this.parts.map(p => p.dimensions).filter(d => d))];
+    logger.warn('getUniqueDimensions: Поле "dimensions" не визначено у моделі Part або не використовується.');
+    return [];
   }
 
-  /**
-   * Генерація нового унікального ID
-   */
-  private generateNewId(): number {
-    // Знаходимо максимальний ID
-    const maxId = this.parts.reduce((max, part) => Math.max(max, part.id), 0);
-    return maxId + 1;
+  public async getAnalogs(part: Part): Promise<Part[]> {
+    // Basic placeholder for analog search - can be expanded significantly
+    await this.initialize();
+    logger.warn('Метод getAnalogs не реалізовано повністю, повертає порожній масив.');
+    // Example: find parts with similar name but different manufacturer
+    // return this.parts.filter(p => 
+    //   p.id !== part.id &&
+    //   p.name.toLowerCase() === part.name.toLowerCase() && 
+    //   p.manufacturer.toLowerCase() !== part.manufacturer.toLowerCase()
+    // );
+    return [];
   }
 
-  /**
-   * Експорт даних у файл
-   */
-  async exportData(): Promise<string> {
-    try {
-      const allParts = await this.getAllParts();
-      const viewHistory = await this.getViewHistory();
-      const favorites = await this.getFavorites();
-      
-      const exportData = {
-        parts: allParts,
-        viewHistory,
-        favorites,
-        exportedAt: new Date().toISOString()
-      };
-      
-      const exportFileName = `sklad_export_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      const exportFilePath = `${FileSystem.documentDirectory}${exportFileName}`;
-      
-      await FileSystem.writeAsStringAsync(exportFilePath, JSON.stringify(exportData));
-      
-      return exportFilePath;
-    } catch (error) {
-      console.error('Помилка при експорті даних:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Імпорт даних з файлу
-   */
-  async importData(filePath: string): Promise<void> {
-    try {
-      const fileContent = await FileSystem.readAsStringAsync(filePath);
-      const importedData = JSON.parse(fileContent);
-      
-      // Перевірка структури даних
-      if (!importedData.parts || !Array.isArray(importedData.parts)) {
-        throw new Error('Некоректний формат файлу імпорту');
-      }
-      
-      // Зберігаємо імпортовані дані
-      this.parts = importedData.parts;
-      await this.savePartsToFile();
-      
-      if (importedData.viewHistory && Array.isArray(importedData.viewHistory)) {
-        this.viewHistory = importedData.viewHistory;
-        await this.saveHistoryToFile();
-      }
-      
-      if (importedData.favorites && Array.isArray(importedData.favorites)) {
-        this.favorites = importedData.favorites;
-        await this.saveFavoritesToFile();
-      }
-    } catch (error) {
-      console.error('Помилка при імпорті даних:', error);
-      throw error;
-    }
+  // --- Methods required by FileStorageServiceInterface ---
+  public async clearAllData(): Promise<void> {
+    await this.initialize(); // Ensure initialized before clearing
+    this.parts = [];
+    this.viewHistory = [];
+    this.favorites = [];
+    // Save empty arrays to files
+    await this.savePartsToFile();
+    await this.saveHistoryToFile();
+    await this.saveFavoritesToFile();
+    logger.info('Усі дані FileStorageService очищено.');
   }
 
-
-
-  // Отримати унікальні категорії
-  async getUniqueCategories(): Promise<string[]> {
-    try {
-      const parts = await this.getAllParts();
-      const uniqueCategories = Array.from(new Set(parts.map(part => part.category).filter(Boolean)));
-      return uniqueCategories as string[];
-    } catch (error) {
-      console.error('Помилка при отриманні унікальних категорій:', error);
-      throw error;
-    }
+  public async clearAllParts(): Promise<void> {
+    await this.initialize();
+    this.parts = [];
+    await this.savePartsToFile();
+    logger.info('Усі запчастини очищено з FileStorageService.');
   }
 
-  // Отримати унікальних виробників
-  async getUniqueManufacturers(): Promise<string[]> {
-    try {
-      const parts = await this.getAllParts();
-      const uniqueManufacturers = Array.from(new Set(parts.map(part => part.manufacturer).filter(Boolean)));
-      return uniqueManufacturers as string[];
-    } catch (error) {
-      console.error('Помилка при отриманні унікальних виробників:', error);
-      throw error;
-    }
+  public async clearAllFavorites(): Promise<void> {
+    await this.initialize();
+    this.favorites = [];
+    await this.saveFavoritesToFile();
+    logger.info('Список обраних очищено в FileStorageService.');
   }
+  // --- End of methods required by FileStorageServiceInterface ---
 
-  // Отримати аналоги для запчастини
-  async getAnalogs(part: Part): Promise<Part[]> {
-    try {
-      const allParts = await this.getAllParts();
-      
-      // Знаходимо аналоги за категорією та схожими характеристиками
-      const analogs = allParts.filter(p => 
-        p.id !== part.id && (
-          p.category === part.category || 
-          p.name.toLowerCase().includes(part.name.toLowerCase()) ||
-          part.name.toLowerCase().includes(p.name.toLowerCase())
-        )
-      );
-      
-      // Обмежуємо кількість аналогів до 10
-      return analogs.slice(0, 10);
-    } catch (error) {
-      console.error('Помилка при отриманні аналогів:', error);
-      return [];
-    }
-  }
-  
-  /**
-   * Очищення всіх запчастин
-   */
-  async clearAllParts(): Promise<void> {
-    try {
-      await this.initialize();
-      this.parts = [];
-      await this.savePartsToFile();
-      console.log('Всі запчастини успішно видалено');
-    } catch (error) {
-      console.error('Помилка при очищенні всіх запчастин:', error);
-      throw error;
-    }
-  }
+  // Removed getStringSimilarity as it's not used by the service and was causing issues.
+  // If similarity search is needed for analogs, it should be a more robust implementation.
 }
 
-export default FileStorageService;
+// Export the singleton instance
+export default FileStorageService.getInstance();

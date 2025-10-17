@@ -6,19 +6,27 @@ import {
   Text, 
   ScrollView, 
   TouchableOpacity, 
-  Switch,
-  Modal,
   Alert,
   SafeAreaView
 } from 'react-native';
+import { Switch } from 'react-native-switch';
+import Modal from 'react-native-modal';
 import { Picker } from '@react-native-picker/picker';
 import Slider from '@react-native-community/slider';
-import { Ionicons } from '@expo/vector-icons';
-import { Part } from '../models/Part';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { Part } from '../models/Part'; // Перевірено: актуальний шлях
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing } from '../theme/theme';
-import Button from './Button';
+import Button from './Button'; // Перевірено: актуальний шлях
+import { Logger } from '../utils/logger';
+// Створюємо логер для AdvancedSearchNew
+// Logger очікує об'єкт з name
+const logger = new Logger({ name: 'AdvancedSearchNew' });
 
+
+
+// Якщо типи для пропсів є у '../types/search', імпортувати їх звідти
+// import type { AdvancedSearchProps } from '../types/search';
 interface AdvancedSearchProps {
   onSearchResults: (parts: Part[]) => void;
   onClose: () => void;
@@ -76,7 +84,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
       setPriceRange({ min: 0, max: maxPrice });
       setFilters(prev => ({ ...prev, maxPrice }));
     } catch (error) {
-      console.error('Помилка при завантаженні фільтрів:', error);
+      logger.error('Помилка при завантаженні фільтрів:', error);
       // Тестові дані для розробки
       setCategories(['', 'Двигун', 'Трансмісія', 'Підвіска', 'Гальма', 'Електрика']);
       setManufacturers(['', 'Bosch', 'Valeo', 'Denso', 'Continental', 'ZF']);
@@ -148,7 +156,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
       onSearchResults(filteredParts);
       onClose();
     } catch (error) {
-      console.error('Помилка при пошуку запчастин:', error);
+      logger.error('Помилка при пошуку запчастин:', error);
       Alert.alert('Помилка', 'Не вдалося виконати пошук');
     } finally {
       setLoading(false);
@@ -181,7 +189,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
               <TextInput
                 style={styles.input}
                 value={filters.query}
-                onChangeText={(value) => setFilters(prev => ({ ...prev, query: value }))}
+                onChangeText={(value: string) => setFilters(prev => ({ ...prev, query: value }))}
                 placeholder="Введіть текст для пошуку"
               />
             </View>
@@ -193,7 +201,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
                 <Picker
                   selectedValue={filters.category}
                   style={styles.picker}
-                  onValueChange={(itemValue) => setFilters(prev => ({ ...prev, category: itemValue }))}
+                  onValueChange={(itemValue: string) => setFilters(prev => ({ ...prev, category: itemValue }))}
                 >
                   {categories.map((category, index) => (
                     <Picker.Item key={index} label={category || 'Всі категорії'} value={category} />
@@ -209,7 +217,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
                 <Picker
                   selectedValue={filters.manufacturer}
                   style={styles.picker}
-                  onValueChange={(itemValue) => setFilters(prev => ({ ...prev, manufacturer: itemValue }))}
+                  onValueChange={(itemValue: string) => setFilters(prev => ({ ...prev, manufacturer: itemValue }))}
                 >
                   {manufacturers.map((manufacturer, index) => (
                     <Picker.Item key={index} label={manufacturer || 'Всі виробники'} value={manufacturer} />
@@ -230,7 +238,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
                 minimumValue={priceRange.min}
                 maximumValue={priceRange.max}
                 value={filters.minPrice}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, minPrice: Math.round(value) }))}
+                onValueChange={(value: number) => setFilters(prev => ({ ...prev, minPrice: Math.round(value) }))}
                 minimumTrackTintColor={colors.primary}
                 maximumTrackTintColor={colors.border}
               />
@@ -239,7 +247,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
                 minimumValue={priceRange.min}
                 maximumValue={priceRange.max}
                 value={filters.maxPrice}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, maxPrice: Math.round(value) }))}
+                onValueChange={(value: number) => setFilters(prev => ({ ...prev, maxPrice: Math.round(value) }))}
                 minimumTrackTintColor={colors.primary}
                 maximumTrackTintColor={colors.border}
               />
@@ -292,7 +300,7 @@ const AdvancedSearchNew: React.FC<AdvancedSearchProps> = ({ onSearchResults, onC
                 <Picker
                   selectedValue={filters.carModel}
                   style={styles.picker}
-                  onValueChange={(itemValue) => setFilters(prev => ({ ...prev, carModel: itemValue }))}
+                  onValueChange={(itemValue: string) => setFilters(prev => ({ ...prev, carModel: itemValue }))}
                 >
                   {carModels.map((model, index) => (
                     <Picker.Item key={index} label={model || 'Всі автомобілі'} value={model} />

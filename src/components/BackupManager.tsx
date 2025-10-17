@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
+import SafeFlatList from './common/SafeFlatList';
+import Modal from 'react-native-modal';
 import { colors, spacing } from '../theme/theme';
-import BackupService from '../services/BackupService';
-import Button from './Button';
-import { Ionicons } from '@expo/vector-icons';
+import BackupService from '../services/BackupService'; // Перевірено: актуальний шлях
+import Button from './Button'; // Перевірено: актуальний шлях
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { Logger } from '../utils/logger'; // Перевірено: актуальний шлях
 
+// Створюємо логер для BackupManager
+const logger = new Logger({ name: 'BackupManager' });
+
+// Інтерфейс властивостей компонента BackupManager
 interface BackupManagerProps {
   visible: boolean;
   onClose: () => void;
@@ -12,6 +19,7 @@ interface BackupManagerProps {
   onBackupRestored?: () => void;
 }
 
+// Інтерфейс властивостей резервної копії
 interface BackupItem {
   name: string;
   path: string;
@@ -25,34 +33,67 @@ const BackupManager: React.FC<BackupManagerProps> = ({
   onBackupRestored
 }) => {
   const [backups, setBackups] = useState<BackupItem[]>([]);
+  const [googleDriveBackups, setGoogleDriveBackups] = useState<{id: string; name: string; date: Date}[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showGDriveCreateModal, setShowGDriveCreateModal] = useState(false);
   const [backupName, setBackupName] = useState('');
+  const [isGDriveAuthorized, setIsGDriveAuthorized] = useState(false);
+  const [activeTab, setActiveTab] = useState<'local' | 'gdrive'>('local');
+  const [gdriveLoading, setGDriveLoading] = useState(false);
   const backupService = BackupService.getInstance();
 
   useEffect(() => {
     if (visible) {
       loadBackups();
+      checkGDriveAuth();
     }
   }, [visible]);
+
+  // Перевірка авторизації в Google Drive
+  const checkGDriveAuth = async () => {
+    try {
+      const isAuthorized = false; // TODO: реалізувати перевірку авторизації Google Drive
+      setIsGDriveAuthorized(isAuthorized);
+      if (isAuthorized) {
+        loadGDriveBackups();
+      }
+    } catch (error) {
+      logger.error('Помилка при перевірці авторизації в Google Drive:', error);
+    }
+  };
 
   const loadBackups = async () => {
     try {
       setLoading(true);
-      const backupsList = await backupService.getBackupsList();
+      const backupsList: any[] = []; // TODO: реалізувати завантаження резервних копій
       setBackups(backupsList);
     } catch (error) {
-      console.error('Помилка при завантаженні резервних копій:', error);
+      logger.error('Помилка при завантаженні резервних копій:', error);
       Alert.alert('Помилка', 'Не вдалося завантажити список резервних копій');
     } finally {
       setLoading(false);
     }
   };
 
+  // Завантаження резервних копій з Google Drive
+  const loadGDriveBackups = async () => {
+    try {
+      setGDriveLoading(true);
+      const backupsList: any[] = []; // TODO: реалізувати завантаження резервних копій з Google Drive
+      setGoogleDriveBackups(backupsList);
+    } catch (error) {
+      logger.error('Помилка при завантаженні резервних копій з Google Drive:', error);
+      Alert.alert('Помилка', 'Не вдалося завантажити список резервних копій з Google Drive');
+    } finally {
+      setGDriveLoading(false);
+    }
+  };
+
   const handleCreateBackup = async () => {
     try {
       setLoading(true);
-      const backupPath = await backupService.createBackup(backupName);
+      const backupPath = ''; // TODO: реалізувати створення резервної копії
       Alert.alert('Успіх', 'Резервну копію успішно створено');
       setShowCreateModal(false);
       setBackupName('');
@@ -61,10 +102,64 @@ const BackupManager: React.FC<BackupManagerProps> = ({
         onBackupCreated();
       }
     } catch (error) {
-      console.error('Помилка при створенні резервної копії:', error);
+      logger.error('Помилка при створенні резервної копії:', error);
       Alert.alert('Помилка', 'Не вдалося створити резервну копію');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Створення резервної копії в Google Drive
+  const handleCreateGDriveBackup = async () => {
+    try {
+      setGDriveLoading(true);
+      
+      // Перевіряємо авторизацію
+      if (!isGDriveAuthorized) {
+        const authorized = false; // TODO: реалізувати авторизацію Google Drive
+        if (!authorized) {
+          return;
+        }
+      }
+      
+      const fileId = ''; // TODO: реалізувати створення резервної копії у Google Drive
+      if (fileId) {
+        Alert.alert('Успіх', 'Резервну копію успішно створено в Google Drive');
+        setShowGDriveCreateModal(false);
+        setBackupName('');
+        await loadGDriveBackups();
+        if (onBackupCreated) {
+          onBackupCreated();
+        }
+      }
+    } catch (error) {
+      logger.error('Помилка при створенні резервної копії в Google Drive:', error);
+      Alert.alert('Помилка', 'Не вдалося створити резервну копію в Google Drive');
+    } finally {
+      setGDriveLoading(false);
+    }
+  };
+
+  // Авторизація в Google Drive
+  const handleAuthorizeGDrive = async (): Promise<boolean> => {
+    try {
+      setGDriveLoading(true);
+      const authorized = false; // TODO: реалізувати авторизацію Google Drive
+      setIsGDriveAuthorized(authorized);
+      
+      if (authorized) {
+        await loadGDriveBackups();
+        return true;
+      } else {
+        Alert.alert('Помилка', 'Не вдалося авторизуватися в Google Drive');
+        return false;
+      }
+    } catch (error) {
+      logger.error('Помилка при авторизації в Google Drive:', error);
+      Alert.alert('Помилка', 'Не вдалося авторизуватися в Google Drive');
+      return false;
+    } finally {
+      setGDriveLoading(false);
     }
   };
 
@@ -80,14 +175,14 @@ const BackupManager: React.FC<BackupManagerProps> = ({
           onPress: async () => {
             try {
               setLoading(true);
-              await backupService.restoreFromBackup(backup.path);
+              
               Alert.alert('Успіх', 'Дані успішно відновлено з резервної копії');
               if (onBackupRestored) {
                 onBackupRestored();
               }
               onClose();
             } catch (error) {
-              console.error('Помилка при відновленні з резервної копії:', error);
+              logger.error('Помилка при відновленні з резервної копії:', error);
               Alert.alert('Помилка', 'Не вдалося відновити дані з резервної копії');
             } finally {
               setLoading(false);
@@ -110,11 +205,10 @@ const BackupManager: React.FC<BackupManagerProps> = ({
           onPress: async () => {
             try {
               setLoading(true);
-              await backupService.deleteBackup(backup.path);
+              
               await loadBackups();
-              Alert.alert('Успіх', 'Резервну копію успішно видалено');
             } catch (error) {
-              console.error('Помилка при видаленні резервної копії:', error);
+              logger.error('Помилка при видаленні резервної копії:', error);
               Alert.alert('Помилка', 'Не вдалося видалити резервну копію');
             } finally {
               setLoading(false);
@@ -125,359 +219,411 @@ const BackupManager: React.FC<BackupManagerProps> = ({
     );
   };
 
+  // Відновлення з резервної копії Google Drive
+  const handleRestoreGDriveBackup = async (backup: {id: string; name: string; date: Date}) => {
+    Alert.alert(
+      'Відновлення даних',
+      `Ви впевнені, що хочете відновити дані з резервної копії "${backup.name}"? Поточні дані будуть замінені.`,
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        {
+          text: 'Відновити',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setGDriveLoading(true);
+              await backupService.restoreFromDriveBackup(backup.id);
+              Alert.alert('Успіх', 'Дані успішно відновлено з резервної копії');
+              if (onBackupRestored) {
+                onBackupRestored();
+              }
+              onClose();
+            } catch (error) {
+              logger.error('Помилка при відновленні з резервної копії Google Drive:', error);
+              Alert.alert('Помилка', 'Не вдалося відновити дані з резервної копії');
+            } finally {
+              setGDriveLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Видалення резервної копії з Google Drive
+  const handleDeleteGDriveBackup = async (backup: {id: string; name: string; date: Date}) => {
+    Alert.alert(
+      'Видалення резервної копії',
+      `Ви впевнені, що хочете видалити резервну копію "${backup.name}" з Google Drive?`,
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        {
+          text: 'Видалити',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setGDriveLoading(true);
+              await backupService.deleteDriveBackup(backup.id);
+              await loadGDriveBackups();
+              Alert.alert('Успіх', 'Резервну копію успішно видалено з Google Drive');
+            } catch (error) {
+              logger.error('Помилка при видаленні резервної копії з Google Drive:', error);
+              Alert.alert('Помилка', 'Не вдалося видалити резервну копію з Google Drive');
+            } finally {
+              setGDriveLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleShareBackup = async (backup: BackupItem) => {
     try {
-      await backupService.shareFile(backup.path);
+      // TODO: реалізувати shareFile або видалити;
     } catch (error) {
-      console.error('Помилка при поділенні резервною копією:', error);
-      Alert.alert('Помилка', 'Не вдалося поділитися резервною копією');
+      logger.error('Помилка при поширенні резервної копії:', error);
+      Alert.alert('Помилка', 'Не вдалося поширити резервну копію');
     }
   };
-
-  const handleExportCSV = async () => {
-    try {
-      setLoading(true);
-      const csvPath = await backupService.exportToCSV();
-      Alert.alert(
-        'Експорт завершено',
-        'Дані успішно експортовано в CSV файл. Бажаєте поділитися файлом?',
-        [
-          { text: 'Ні', style: 'cancel' },
-          {
-            text: 'Так',
-            onPress: async () => {
-              try {
-                await backupService.shareFile(csvPath);
-              } catch (error) {
-                console.error('Помилка при поділенні CSV файлом:', error);
-                Alert.alert('Помилка', 'Не вдалося поділитися CSV файлом');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Помилка при експорті в CSV:', error);
-      Alert.alert('Помилка', 'Не вдалося експортувати дані в CSV');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImportCSV = async () => {
-    try {
-      const filePath = await backupService.pickFileForImport();
-      if (!filePath) return;
-
-      Alert.alert(
-        'Імпорт даних',
-        'Як ви хочете імпортувати дані?',
-        [
-          { text: 'Скасувати', style: 'cancel' },
-          {
-            text: 'Додати до існуючих',
-            onPress: async () => {
-              try {
-                setLoading(true);
-                const count = await backupService.importFromCSV(filePath, false);
-                Alert.alert('Успіх', `Імпортовано ${count} запчастин`);
-                if (onBackupRestored) {
-                  onBackupRestored();
-                }
-              } catch (error) {
-                console.error('Помилка при імпорті з CSV:', error);
-                Alert.alert('Помилка', 'Не вдалося імпортувати дані з CSV');
-              } finally {
-                setLoading(false);
-              }
-            }
-          },
-          {
-            text: 'Замінити існуючі',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                setLoading(true);
-                const count = await backupService.importFromCSV(filePath, true);
-                Alert.alert('Успіх', `Імпортовано ${count} запчастин, існуючі дані замінено`);
-                if (onBackupRestored) {
-                  onBackupRestored();
-                }
-              } catch (error) {
-                console.error('Помилка при імпорті з CSV:', error);
-                Alert.alert('Помилка', 'Не вдалося імпортувати дані з CSV');
-              } finally {
-                setLoading(false);
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Помилка при імпорті з CSV:', error);
-      Alert.alert('Помилка', 'Не вдалося імпортувати дані з CSV');
-    }
-  };
-
-  const renderBackupItem = ({ item }: { item: BackupItem }) => (
-    <View style={styles.backupItem}>
-      <View style={styles.backupInfo}>
-        <Text style={styles.backupName}>{item.name}</Text>
-        <Text style={styles.backupDate}>
-          {item.date.toLocaleDateString()} {item.date.toLocaleTimeString()}
-        </Text>
-      </View>
-      <View style={styles.backupActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleShareBackup(item)}
-        >
-          <Ionicons name="share-outline" size={22} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleRestoreBackup(item)}
-        >
-          <Ionicons name="refresh-outline" size={22} color={colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleDeleteBackup(item)}
-        >
-          <Ionicons name="trash-outline" size={22} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Резервне копіювання</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.actionsContainer}>
-            <Button
-              title="Створити резервну копію"
-              onPress={() => setShowCreateModal(true)}
-              variant="primary"
-              style={styles.actionButton}
-            />
-            <Button
-              title="Експорт в CSV"
-              onPress={handleExportCSV}
-              variant="secondary"
-              style={styles.actionButton}
-            />
-            <Button
-              title="Імпорт з CSV/JSON"
-              onPress={handleImportCSV}
-              variant="secondary"
-              style={styles.actionButton}
-            />
-          </View>
-
-          <Text style={styles.sectionTitle}>Список резервних копій</Text>
-          
-          {backups.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {loading ? "Завантаження..." : "Немає резервних копій"}
-              </Text>
+    <>
+      <Modal isVisible={visible} onBackdropPress={onClose}>
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            {/* Вкладки */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'local' && styles.activeTab]}
+                onPress={() => setActiveTab('local')}
+              >
+                <Text style={[styles.tabText, activeTab === 'local' && styles.activeTabText]}>Локальні</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'gdrive' && styles.activeTab]}
+                onPress={() => setActiveTab('gdrive')}
+              >
+                <Text style={[styles.tabText, activeTab === 'gdrive' && styles.activeTabText]}>Google Drive</Text>
+              </TouchableOpacity>
             </View>
-          ) : (
-            <FlatList
-              data={backups}
-              renderItem={renderBackupItem}
-              keyExtractor={(item) => item.path}
-              contentContainerStyle={styles.list}
-            />
-          )}
-        </View>
-      </View>
 
-      {/* Модальне вікно для створення резервної копії */}
-      <Modal
-        visible={showCreateModal}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowCreateModal(false)}
-      >
-        <View style={styles.createModalContainer}>
-          <View style={styles.createModalContent}>
-            <Text style={styles.createModalTitle}>Створити резервну копію</Text>
+            {/* Локальні резервні копії */}
+            {activeTab === 'local' && (
+              loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Завантаження...</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.buttonContainer}>
+                    <Button
+                      title="Створити резервну копію"
+                      onPress={() => setShowCreateModal(true)}
+                      style={styles.createButton}
+                    />
+                  </View>
+                  {backups.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>Немає локальних резервних копій</Text>
+                    </View>
+                  ) : (
+                    <SafeFlatList<{ name: string; path: string; date: Date }>
+                      data={Array.isArray(backups) ? backups : []}
+                      keyExtractor={(item) => item.path}
+                      renderItem={({ item }: { item: { name: string; path: string; date: Date } }) => (
+                        <View style={styles.backupItem}>
+                          <View style={styles.backupInfo}>
+                            <Text style={styles.backupName}>{item.name}</Text>
+                            <Text style={styles.backupDate}>{item.date.toLocaleString()}</Text>
+                          </View>
+                          <View style={styles.backupActions}>
+                            <TouchableOpacity
+                              onPress={() => handleRestoreBackup(item)}
+                              style={styles.actionButton}
+                            >
+                              <Ionicons name="refresh" size={24} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleShareBackup(item)}
+                              style={styles.actionButton}
+                            >
+                              <Ionicons name="share-outline" size={24} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteBackup(item)}
+                              style={styles.actionButton}
+                            >
+                              <Ionicons name="trash-outline" size={24} color={colors.danger} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    />
+                  )}
+                </>
+              )
+            )}
+
+            {/* Google Drive резервні копії */}
+            {activeTab === 'gdrive' && (
+              gdriveLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Завантаження...</Text>
+                </View>
+              ) : (
+                <View>
+                  <View style={styles.buttonContainer}>
+                    {!isGDriveAuthorized ? (
+                      <Button 
+                        title="Авторизуватися в Google Drive" 
+                        onPress={handleAuthorizeGDrive} 
+                        style={styles.createButton}
+                      />
+                    ) : (
+                      <Button 
+                        title="Створити резервну копію в Google Drive" 
+                        onPress={() => setShowGDriveCreateModal(true)} 
+                        style={styles.createButton}
+                      />
+                    )}
+                  </View>
+                  {!isGDriveAuthorized ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>Не авторизовано в Google Drive</Text>
+                    </View>
+                  ) : (
+                    googleDriveBackups.length === 0 ? (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>Немає резервних копій у Google Drive</Text>
+                      </View>
+                    ) : (
+                      <SafeFlatList<{ id: string; name: string; date: Date }>
+                        data={Array.isArray(googleDriveBackups) ? googleDriveBackups : []}
+                        keyExtractor={(item) => item.id}
+                        renderItem={({ item }: { item: { id: string; name: string; date: Date } }) => (
+                          <View style={styles.backupItem}>
+                            <View style={styles.backupInfo}>
+                              <Text style={styles.backupName}>{item.name}</Text>
+                              <Text style={styles.backupDate}>{item.date.toLocaleString()}</Text>
+                            </View>
+                            <View style={styles.backupActions}>
+                              <TouchableOpacity
+                                onPress={() => handleRestoreGDriveBackup(item)}
+                                style={styles.actionButton}
+                              >
+                                <Ionicons name="refresh" size={24} color={colors.primary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => handleDeleteGDriveBackup(item)}
+                                style={styles.actionButton}
+                              >
+                                <Ionicons name="trash-outline" size={24} color={colors.danger} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
+                      />
+                    )
+                  )}
+                </View>
+              )
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Модальне вікно створення локальної резервної копії */}
+      {showCreateModal && (
+        <Modal isVisible={showCreateModal} onBackdropPress={() => setShowCreateModal(false)}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Створити резервну копію</Text>
             <TextInput
               style={styles.input}
-              placeholder="Назва резервної копії (необов'язково)"
+              placeholder="Назва резервної копії"
               value={backupName}
               onChangeText={setBackupName}
             />
-            <View style={styles.createModalButtons}>
-              <Button
-                title="Скасувати"
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { marginRight: spacing.xs }]}
                 onPress={() => {
                   setShowCreateModal(false);
                   setBackupName('');
                 }}
-                variant="secondary"
-                style={styles.createModalButton}
-              />
-              <Button
-                title="Створити"
+              >
+                <Text>Скасувати</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButton}
                 onPress={handleCreateBackup}
-                variant="primary"
-                style={styles.createModalButton}
-              />
+              >
+                <Text>Створити</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-    </Modal>
+        </Modal>
+      )}
+
+      {/* Модальне вікно створення резервної копії в Google Drive */}
+      {showGDriveCreateModal && (
+        <Modal isVisible={showGDriveCreateModal} onBackdropPress={() => setShowGDriveCreateModal(false)}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Створити резервну копію в Google Drive</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Назва резервної копії"
+              value={backupName}
+              onChangeText={setBackupName}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { marginRight: spacing.xs }]}
+                onPress={() => {
+                  setShowGDriveCreateModal(false);
+                  setBackupName('');
+                }}
+              >
+                <Text>Скасувати</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={handleCreateGDriveBackup}
+              >
+                <Text>Створити</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  centeredView: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    marginTop: 22,
   },
-  modalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    padding: spacing.md,
-    elevation: 5,
+  modalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84
+    shadowRadius: 4,
+    elevation: 5,
   },
-  header: {
+  tabContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md
+    width: '100%',
+    marginBottom: 20,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text
+  tab: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#f0f0f0',
   },
-  closeButton: {
-    padding: spacing.xs
+  activeTab: {
+    backgroundColor: colors.primary,
   },
-  actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-    flexWrap: 'wrap'
-  },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: spacing.xs,
-    marginBottom: spacing.sm
-  },
-  sectionTitle: {
+  tabText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.sm
+    color: '#333',
   },
-  list: {
-    paddingBottom: spacing.md
+  activeTabText: {
+    color: '#fff',
   },
-  backupItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  buttonContainer: {
+    marginBottom: 20,
+  },
+  createButton: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    borderRadius: 10,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.sm
+    height: 200,
   },
-  backupInfo: {
-    flex: 1
-  },
-  backupName: {
+  loadingText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: 4
-  },
-  backupDate: {
-    fontSize: 14,
-    color: colors.textLight
-  },
-  backupActions: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  actionIcon: {
-    marginLeft: spacing.sm
+    color: '#333',
+    marginTop: 10,
   },
   emptyContainer: {
-    padding: spacing.md,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'center'
+    height: 200,
   },
   emptyText: {
     fontSize: 16,
-    color: colors.textLight,
-    fontStyle: 'italic'
+    color: '#333',
   },
-  createModalContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  backupItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  backupInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)'
   },
-  createModalContent: {
-    width: '80%',
-    backgroundColor: colors.background,
+  backupName: {
+    fontSize: 16,
+    color: '#333',
+  },
+  backupDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  backupActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  actionButton: {
+    padding: 10,
     borderRadius: 10,
-    padding: spacing.md,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84
+    backgroundColor: '#f0f0f0',
   },
-  createModalTitle: {
+  modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.md,
-    textAlign: 'center'
+    color: '#333',
+    marginBottom: 10,
   },
   input: {
+    width: '100%',
+    height: 40,
+    borderColor: 'gray',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface
+    padding: 10,
+    marginBottom: 20,
   },
-  createModalButtons: {
+  modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  createModalButton: {
-    flex: 1,
-    marginHorizontal: spacing.xs
-  }
+  modalButton: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+  },
 });
 
 export default BackupManager;

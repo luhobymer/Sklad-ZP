@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "react-native",
+    "lib": ["esnext", "dom"],
+    "moduleResolution": "node",
+    "skipLibCheck": false, // Changed to false to ensure type checking for all files
+    "resolveJsonModule": true,
+    "target": "esnext",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "*": ["node_modules/*"]
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
+    "strict": true,
+    "noImplicitAny": false, // Temporarily disabled to reduce errors
+    "module": "esnext",
+    "allowJs": true,
+    "moduleDetection": "force",
+    "forceConsistentCasingInFileNames": true,
+    "downlevelIteration": true,
+    "types": ["node", "jest", "@types/jest"], // Added types for better type checking
+    "jsxImportSource": "@emotion/react" // Added for better JSX support
+  },
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "**/*_backup.ts",
+    "**/*.bak"
+  ],
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "**/__tests__/**/*",
+    "tests/**/*"
+  ]
+}

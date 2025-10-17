@@ -1,12 +1,17 @@
-import FileStorageService from './FileStorageService';
+import fileStorageServiceInstance, { FileStorageService as FileStorageServiceType } from './FileStorageService';
 import { Part } from '../models/Part';
+import { Logger } from '../utils/logger';
 
 export class PartsCompatibilityService {
+  // Створюємо логер для PartsCompatibilityService
+  private logger: Logger;
+
   private static instance: PartsCompatibilityService;
-  private storageService: FileStorageService;
+  private storageService: FileStorageServiceType;
 
   private constructor() {
-    this.storageService = FileStorageService.getInstance();
+    this.logger = Logger.getInstance({ prefix: 'PartsCompatibilityService' });
+    this.storageService = fileStorageServiceInstance as any;
   }
 
   public static getInstance(): PartsCompatibilityService {
@@ -22,7 +27,7 @@ export class PartsCompatibilityService {
       
       // Фільтруємо запчастини, які мають ту ж категорію і виробника, але не є тією ж запчастиною
       // Також перевіряємо, чи є спільні сумісні автомобілі
-      const compatibleParts = allParts.filter(p => {
+      const compatibleParts = allParts.filter((p: Part) => {
         if (p.id === part.id) return false;
         if (p.category !== part.category) return false;
         if (p.manufacturer !== part.manufacturer) return false;
@@ -38,7 +43,7 @@ export class PartsCompatibilityService {
       
       return compatibleParts;
     } catch (error) {
-      console.error('Помилка при пошуку сумісних запчастин:', error);
+      this.logger.error('Помилка при пошуку сумісних запчастин:', error);
       throw error;
     }
   }
@@ -50,7 +55,7 @@ export class PartsCompatibilityService {
       // Фільтруємо запчастини, які мають ту ж категорію, але різних виробників
       // і не є тією ж запчастиною
       // Також перевіряємо, чи є спільні сумісні автомобілі
-      const analogs = allParts.filter(p => {
+      const analogs = allParts.filter((p: Part) => {
         if (p.id === part.id) return false;
         if (p.category !== part.category) return false;
         
@@ -65,7 +70,7 @@ export class PartsCompatibilityService {
       
       return analogs;
     } catch (error) {
-      console.error('Помилка при пошуку аналогів:', error);
+      this.logger.error('Помилка при пошуку аналогів:', error);
       throw error;
     }
   }

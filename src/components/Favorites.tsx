@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import SafeFlatList from './common/SafeFlatList';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing, typography } from '../theme/theme';
 import PartCard from './PartCard';
 import Button from './Button';
+import { Logger } from '../utils/logger';
+
+// Створюємо логер для Favorites
+const logger = new Logger({ name: 'Favorites' });
+
 
 interface FavoritesProps {
   onPartSelect: (part: Part) => void;
@@ -23,7 +29,7 @@ export const Favorites: React.FC<FavoritesProps> = ({ onPartSelect }) => {
       const favoriteParts = await storageService.getFavorites();
       setFavorites(favoriteParts);
     } catch (error) {
-      console.error('Помилка при завантаженні обраних запчастин:', error);
+      logger.error('Помилка при завантаженні обраних запчастин:', error);
     }
   };
 
@@ -33,7 +39,7 @@ export const Favorites: React.FC<FavoritesProps> = ({ onPartSelect }) => {
       await storageService.removeFromFavorites(partId);
       await loadFavorites(); // Оновлюємо список після видалення
     } catch (error) {
-      console.error('Помилка при видаленні з обраних:', error);
+      logger.error('Помилка при видаленні з обраних:', error);
     }
   };
 
@@ -48,8 +54,8 @@ export const Favorites: React.FC<FavoritesProps> = ({ onPartSelect }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Обрані запчастини</Text>
-      <FlatList
-        data={favorites}
+      <SafeFlatList<Part>
+        data={Array.isArray(favorites) ? favorites : []}
         keyExtractor={(item) => item.id?.toString() || ''}
         renderItem={({ item }) => (
           <View style={styles.itemContainer}>
@@ -80,16 +86,37 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h2,
     color: colors.text,
-    padding: spacing.md
+    marginBottom: spacing.md as number,
+    textAlign: 'center' as const,
+    fontFamily: 'System',
+    fontWeight: '600' as const,
   },
   listContent: {
     padding: spacing.sm
   },
   itemContainer: {
-    marginBottom: spacing.md
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   removeButton: {
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
+    backgroundColor: colors.danger,
+    padding: spacing.sm,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: 'bold' as const,
+    fontFamily: 'System',
     alignSelf: 'flex-end'
   },
   emptyContainer: {
@@ -100,7 +127,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.body,
-    color: colors.textLight
+    color: colors.textLight,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: 'normal' as const
   }
 });
 

@@ -1,0 +1,31 @@
+# Ігнорувати node_modules
+node_modules/
+
+# Ігнорувати збірки
+build/
+dist/
+
+# Ігнорувати файли конфігурації
+babel.config.js
+metro.config.js
+react-native.config.js
+
+# Ігнорувати тимчасові файли
+*.log
+*.bak
+*_backup.*
+
+# Ігнорувати файли Android та iOS
+android/
+ios/
+
+# Ігнорувати файли тестів
+__tests__/
+__mocks__/
+*.test.js
+*.test.ts
+*.test.tsx
+
+# Ігнорувати файли документації
+docs/
+*.md

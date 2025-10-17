@@ -1,12 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TextInput, Text, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, StyleSheet, TextInput, Text, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import Modal from 'react-native-modal';
 import { Picker } from '@react-native-picker/picker';
+import type { PickerProps } from '@react-native-picker/picker';
+
+// Кастомний компонент Picker з правильними типами
+interface CustomPickerProps<T> extends Omit<PickerProps<T>, 'children'> {
+  items: Array<{ label: string; value: T; color?: string }>;
+  placeholder?: string;
+}
+
+function CustomPicker<T>({ items, placeholder, ...props }: CustomPickerProps<T>) {
+  return (
+    <Picker {...props}>
+      {placeholder && <Picker.Item label={placeholder} value={undefined as unknown as T} />}
+      {items.map((item, index) => (
+        <Picker.Item key={String(item.value) || index} {...item} />
+      ))}
+    </Picker>
+  );
+}
 import Slider from '@react-native-community/slider';
-import { Ionicons } from '@expo/vector-icons';
+import type { SliderProps } from '@react-native-community/slider';
+
+// Типи для обходу проблем з типами Slider
+type SliderComponent = React.ComponentType<SliderProps> & {
+  prototype: React.Component<SliderProps, any>;
+  displayName?: string;
+};
+const SliderComponent = Slider as unknown as SliderComponent;
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Part } from '../models/Part';
 import FileStorageService from '../services/FileStorageService';
 import { colors, spacing } from '../theme/theme';
 import Button from './Button';
+import { Logger } from '../utils/logger';
+
+// Створюємо логер для AdvancedSearch
+const logger = Logger.getInstance({ prefix: 'AdvancedSearch' });
+
 
 interface AdvancedSearchProps {
   onSearchResults: (parts: Part[]) => void;
@@ -14,15 +46,27 @@ interface AdvancedSearchProps {
 }
 
 const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClose }) => {
-  const [searchParams, setSearchParams] = useState({
+  interface SearchParams {
+    query: string;
+    category: string;
+    manufacturer: string;
+    priceRange: { min: number; max: number };
+    isNew: boolean | undefined;
+    inStock: boolean;
+    sortBy: 'price' | 'name' | 'updatedAt' | 'quantity';
+    sortOrder: 'ASC' | 'DESC';
+    carModel: string;
+  }
+
+  const [searchParams, setSearchParams] = useState<SearchParams>({
     query: '',
     category: '',
     manufacturer: '',
     priceRange: { min: 0, max: 10000 },
-    isNew: undefined as boolean | undefined,
+    isNew: undefined,
     inStock: false,
-    sortBy: 'updatedAt' as 'price' | 'name' | 'updatedAt' | 'quantity',
-    sortOrder: 'DESC' as 'ASC' | 'DESC',
+    sortBy: 'updatedAt',
+    sortOrder: 'DESC',
     carModel: ''
   });
 
@@ -39,7 +83,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
   const loadFilters = async () => {
     try {
       setLoading(true);
-      const storageService = FileStorageService.getInstance();
+      const storageService = FileStorageService;
       
       // Перевіряємо чи ініціалізовано сховище
       if (!storageService) {
@@ -68,7 +112,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
       setManufacturers(['', ...loadedManufacturers]);
       setCarModels(['', ...Array.from(uniqueCarModels).sort()]);
     } catch (error) {
-      console.error('Помилка при завантаженні фільтрів:', error);
+      logger.error('Помилка при завантаженні фільтрів:', error);
       // Тестові дані для розробки
       setCategories(['', 'Двигун', 'Трансмісія', 'Підвіска', 'Гальма', 'Електрика']);
       setManufacturers(['', 'Bosch', 'Valeo', 'Denso', 'Continental', 'ZF']);
@@ -79,18 +123,21 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
   };
 
   // Оновлення параметрів пошуку
-  const handleParamChange = (param: string, value: any) => {
+  const handleParamChange = <K extends keyof SearchParams>(
+    param: K,
+    value: SearchParams[K]
+  ) => {
     setSearchParams(prev => ({
       ...prev,
       [param]: value
-    }));
+    } as SearchParams));
   };
 
   // Виконання пошуку з розширеними параметрами
   const handleSearch = async () => {
     try {
       setLoading(true);
-      const storageService = FileStorageService.getInstance();
+      const storageService = FileStorageService;
       
       if (!storageService) {
         Alert.alert('Помилка', 'Сховище недоступне');
@@ -103,15 +150,15 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
       // Перетворюємо категорію на нижній регістр для пошуку
       if (searchParamsToUse.category) {
         searchParamsToUse.category = searchParamsToUse.category.toLowerCase();
-        console.log('Категорія для пошуку:', searchParamsToUse.category);
+        logger.info('Категорія для пошуку:', searchParamsToUse.category);
       }
       
       const results = await storageService.searchParts(searchParamsToUse);
-      console.log('Знайдено результатів:', results.length);
+      logger.info('Знайдено результатів:', results.length);
       onSearchResults(results);
       onClose();
     } catch (error) {
-      console.error('Помилка при розширеному пошуку:', error);
+      logger.error('Помилка при розширеному пошуку:', error);
       Alert.alert('Помилка пошуку', 'Не вдалося виконати пошук. Спробуйте пізніше.');
     } finally {
       setLoading(false);
@@ -144,7 +191,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
             <TextInput
               style={styles.input}
               value={searchParams.query}
-              onChangeText={(value) => handleParamChange('query', value)}
+              onChangeText={(value: string) => handleParamChange('query', value)}
               placeholder="Введіть артикул, назву або інше"
             />
           </View>
@@ -152,34 +199,44 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
           <View style={styles.formGroup}>
             <Text style={styles.label}>Категорія</Text>
             <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={searchParams.category}
-                onValueChange={(value) => handleParamChange('category', value)}
-                style={styles.picker}
-                mode="dropdown"
-              >
-                <Picker.Item label="Всі категорії" value="" />
-                {categories.map((category, index) => (
-                  <Picker.Item key={index} label={category} value={category} />
-                ))}
-              </Picker>
+              <View style={styles.pickerContainer}>
+                <CustomPicker
+                  selectedValue={searchParams.category}
+                  onValueChange={(value: string) => handleParamChange('category', value)}
+                  style={[styles.picker, { color: colors.text }]}
+                  
+                  items={[
+                    { label: 'Всі категорії', value: '' },
+                    ...categories.map(category => ({
+                      label: category,
+                      value: category,
+                      color: colors.text
+                    }))
+                  ]}
+                />
+              </View>
             </View>
           </View>
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Виробник</Text>
             <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={searchParams.manufacturer}
-                onValueChange={(value) => handleParamChange('manufacturer', value)}
-                style={styles.picker}
-                mode="dropdown"
-              >
-                <Picker.Item label="Всі виробники" value="" />
-                {manufacturers.map((manufacturer, index) => (
-                  <Picker.Item key={index} label={manufacturer} value={manufacturer} />
-                ))}
-              </Picker>
+              <View style={styles.pickerContainer}>
+                <CustomPicker
+                  selectedValue={searchParams.manufacturer}
+                  onValueChange={(value: string) => handleParamChange('manufacturer', value)}
+                  style={[styles.picker, { color: colors.text }]}
+                  
+                  items={[
+                    { label: 'Всі виробники', value: '' },
+                    ...manufacturers.map(manufacturer => ({
+                      label: manufacturer,
+                      value: manufacturer,
+                      color: colors.text
+                    }))
+                  ]}
+                />
+              </View>
             </View>
           </View>
 
@@ -189,17 +246,19 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
               <Text>0 ₴</Text>
               <Text>10000 ₴</Text>
             </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={10000}
-              step={100}
-              value={searchParams.priceRange.max}
-              onValueChange={(value) => handleParamChange('priceRange', { ...searchParams.priceRange, max: value })}
-              minimumTrackTintColor={colors.primary}
-              maximumTrackTintColor={colors.border}
-              thumbTintColor={colors.primary}
-            />
+            <View style={styles.sliderContainer}>
+              <SliderComponent
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={10000}
+                step={100}
+                value={searchParams.priceRange.max}
+                onValueChange={(value: number) => handleParamChange('priceRange', { ...searchParams.priceRange, max: value })}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
           </View>
 
           <View style={styles.formGroup}>
@@ -243,17 +302,22 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ onSearchResults, onClos
           <View style={styles.formGroup}>
             <Text style={styles.label}>Сортувати за</Text>
             <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={searchParams.sortBy}
-                onValueChange={(value) => handleParamChange('sortBy', value)}
-                style={styles.picker}
-                mode="dropdown"
-              >
-                <Picker.Item label="Датою оновлення" value="updatedAt" />
-                <Picker.Item label="Ціною" value="price" />
-                <Picker.Item label="Назвою" value="name" />
-                <Picker.Item label="Кількістю" value="quantity" />
-              </Picker>
+              <View style={styles.pickerContainer}>
+                <CustomPicker
+                  selectedValue={searchParams.sortBy}
+                  onValueChange={(value: 'updatedAt' | 'price' | 'name' | 'quantity') => 
+                    handleParamChange('sortBy', value)
+                  }
+                  style={[styles.picker, { color: colors.text }]}
+                  
+                  items={[
+                    { label: 'За датою оновлення', value: 'updatedAt' as const, color: colors.text },
+                    { label: 'За ціною', value: 'price' as const, color: colors.text },
+                    { label: 'За назвою', value: 'name' as const, color: colors.text },
+                    { label: 'За кількістю', value: 'quantity' as const, color: colors.text }
+                  ]}
+                />
+              </View>
             </View>
           </View>
 

@@ -76,7 +76,6 @@ const PartForm: React.FC<PartFormScreenProps> = ({ route, navigation }) => {
       }
     };
     loadPart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPartId]);
 
   /**

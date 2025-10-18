@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import crashlytics from '@react-native-firebase/crashlytics';
 import { Logger } from '../utils/logger';
+import packageJson from '../../package.json';
 
 const logger = new Logger({ prefix: 'FirebaseService' });
 
@@ -31,7 +32,7 @@ export class FirebaseService {
       
       // Встановлення користувацьких атрибутів
       await crashlytics().setAttribute('platform', Platform.OS);
-      await crashlytics().setAttribute('appVersion', require('../../package.json').version);
+      await crashlytics().setAttribute('appVersion', packageJson.version);
       
       this.initialized = true;
       logger.info('Firebase успішно ініціалізовано');

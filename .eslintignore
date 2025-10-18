@@ -22,9 +22,17 @@ ios/
 # Ігнорувати файли тестів
 __tests__/
 __mocks__/
+tests/
 *.test.js
 *.test.ts
 *.test.tsx
+*.spec.js
+*.spec.ts
+*.spec.tsx
+
+# Ігнорувати файли типів
+**/@types/
+*.d.ts
 
 # Ігнорувати файли документації
 docs/

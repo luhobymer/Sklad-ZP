@@ -1,50 +1,16 @@
 import { Platform } from 'react-native';
-
-// Оголошуємо типи для модуля react-native-fs
-interface RNFSStatResult {
-  isFile: () => boolean;
-  isDirectory: () => boolean;
-  size: number;
-  mtime?: Date;
-  ctime?: Date;
-  name?: string;
-  path: string;
-}
-
-interface RNFSInterface {
-  DocumentDirectoryPath: string;
-  CachesDirectoryPath: string;
-  stat(filePath: string): Promise<RNFSStatResult>;
-  mkdir(dirPath: string, options?: { NSURLIsExcludedFromBackupKey?: boolean }): Promise<void>;
-  readFile(filePath: string, encoding: string): Promise<string>;
-  writeFile(filePath: string, content: string, encoding: string): Promise<void>;
-  unlink(filePath: string): Promise<void>;
-  copyFile(sourcePath: string, destPath: string): Promise<void>;
-  moveFile(sourcePath: string, destPath: string): Promise<void>;
-  readDir(dirPath: string): Promise<Array<{
-    name: string;
-    path: string;
-    size: number;
-    isFile: () => boolean;
-    isDirectory: () => boolean;
-  }>>;
-  downloadFile(options: {
-    fromUrl: string;
-    toFile: string;
-    background?: boolean;
-    begin?: (res: { bytesWritten: number; contentLength: number }) => void;
-    progress?: (res: { bytesWritten: number; contentLength: number }) => void;
-  }): { promise: Promise<{ statusCode: number }> };
-}
-
-const RNFS = require('react-native-fs') as unknown as RNFSInterface;
-import { Buffer } from 'buffer';
-import Share from 'react-native-share';
-import DocumentPicker from 'react-native-document-picker';
+import RNFS from 'react-native-fs';
 import { Logger } from './logger';
 
 // Створюємо екземпляр логера
-const logger = new Logger({ name: 'fileUtils' } as any);
+const logger = new Logger({ name: 'fileUtils' });
+
+/**
+ * Type guard для перевірки чи є помилка з кодом
+ */
+const hasErrorCode = (error: unknown): error is { code: string } => {
+  return typeof error === 'object' && error !== null && 'code' in error;
+};
 
 /**
  * Utility functions for file operations
@@ -128,11 +94,11 @@ export const ensureDirectoryExists = async (dirPath: string): Promise<boolean> =
     }
     
     return true;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    if (hasErrorCode(error) && error.code === 'ENOENT') {
       // Directory doesn't exist, create it
       try {
-        await RNFS.mkdir(dirPath, { NSURLIsExcludedFromBackupKey: false });
+        await RNFS.mkdir(dirPath);
         return true;
       } catch (mkdirError) {
         logger.error(`Error creating directory: ${dirPath}`, mkdirError);
@@ -149,8 +115,8 @@ export const fileExists = async (filePath: string): Promise<boolean> => {
   try {
     const fileInfo = await RNFS.stat(filePath);
     return fileInfo.isFile();
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    if (hasErrorCode(error) && error.code === 'ENOENT') {
       return false;
     }
     logger.error(`Error checking if file exists: ${filePath}`, error);
@@ -162,8 +128,8 @@ export const directoryExists = async (dirPath: string): Promise<boolean> => {
   try {
     const dirInfo = await RNFS.stat(dirPath);
     return dirInfo.isDirectory();
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    if (hasErrorCode(error) && error.code === 'ENOENT') {
       return false;
     }
     logger.error(`Error checking if directory exists: ${dirPath}`, error);
@@ -196,8 +162,8 @@ export const deleteFile = async (filePath: string): Promise<boolean> => {
   try {
     await RNFS.unlink(filePath);
     return true;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    if (hasErrorCode(error) && error.code === 'ENOENT') {
       return true; // File doesn't exist, consider it deleted
     }
     logger.error(`Error deleting file: ${filePath}`, error);
@@ -231,7 +197,7 @@ export const listFiles = async (dirPath: string): Promise<string[]> => {
   try {
     await ensureDirectoryExists(dirPath);
     const files = await RNFS.readDir(dirPath);
-    return files.map((file: any) => file.name);
+    return files.map((file) => file.name);
   } catch (error) {
     logger.error(`Error listing files in directory: ${dirPath}`, error);
     return [];
@@ -250,9 +216,12 @@ export const getFileInfo = async (filePath: string) => {
 export const getFileSize = async (filePath: string): Promise<number> => {
   try {
     const fileInfo = await RNFS.stat(filePath);
-    return fileInfo.isFile() ? fileInfo.size : 0;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+    if (fileInfo.isFile() && 'size' in fileInfo) {
+      return (fileInfo as unknown as { size: number }).size;
+    }
+    return 0;
+  } catch (error: unknown) {
+    if (hasErrorCode(error) && error.code === 'ENOENT') {
       return 0;
     }
     logger.error(`Error getting file size: ${filePath}`, error);
@@ -312,14 +281,13 @@ export const downloadFile = async (
       }
     };
 
-    const result: any = await RNFS.downloadFile(downloadOptions).promise;
+    const result = await RNFS.downloadFile(downloadOptions).promise;
     
     if (result.statusCode !== 200) {
       throw new Error(`Download failed with status code: ${result.statusCode}`);
     }
     
-    // Get file info for mime type
-    const fileInfo = await RNFS.stat(localPath);
+    // Get mime type from file path
     const mimeType = getMimeType(localPath);
     
     return {

@@ -1,5 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Logger } from '../utils/logger';
+
+const logger = new Logger({ prefix: 'ErrorBoundary' });
 
 type Props = {
   children: React.ReactNode;
@@ -20,10 +23,9 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: any) {
-    // Логуємо у консоль, щоб бачити помилки замість білого екрану
-    // eslint-disable-next-line no-console
-    console.error('[ErrorBoundary]', error, info);
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Логуємо помилку через Logger замість консолі
+    logger.error('Помилка в компоненті', error, info);
   }
 
   private handleReload = () => {

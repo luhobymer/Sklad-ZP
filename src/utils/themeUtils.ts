@@ -1,5 +1,8 @@
 import { Platform } from 'react-native';
 import { ColorSchemeName } from '../theme/ThemeContext';
+import { Logger } from './logger';
+
+const logger = new Logger({ prefix: 'ThemeUtils' });
 
 // Define EventSubscription type locally since it's not exported in newer RN versions
 type EventSubscription = {
@@ -12,18 +15,18 @@ type ThemeChangeListener = (theme: ColorSchemeName) => void;
 // Mock Appearance API for compatibility
 const Appearance = {
   getColorScheme: (): ColorSchemeName => 'light',
-  addChangeListener: (listener: any) => {
+  addChangeListener: (_listener: any) => {
     // Mock implementation
   },
-  removeChangeListener: (listener: any) => {
+  removeChangeListener: (_listener: any) => {
     // Mock implementation
   },
 };
 
 // Mock NativeEventEmitter
 class NativeEventEmitter {
-  constructor(nativeModule: any) {}
-  addListener(eventType: string, listener: any): EventSubscription {
+  constructor(_nativeModule: any) {}
+  addListener(_eventType: string, _listener: any): EventSubscription {
     return {
       remove: () => {},
     } as EventSubscription;
@@ -33,7 +36,7 @@ class NativeEventEmitter {
 // Mock NativeModules
 const NativeModules = {
   ThemeUtils: {
-    setDarkMode: async (isDark: boolean) => {
+    setDarkMode: async (_isDark: boolean) => {
       // Mock implementation
     },
   },
@@ -77,27 +80,27 @@ export class ThemeUtils {
    * Initialize the theme manager
    */
   public async initialize(): Promise<void> {
-    console.log('ThemeUtils: Initializing theme manager');
-    
+    logger.log('Initializing theme manager');
+
     // Listen for system theme changes
     Appearance.addChangeListener(this.handleSystemThemeChange);
-    console.log('ThemeUtils: Added system theme change listener');
-    
+    logger.log('Added system theme change listener');
+
     // Set up native theme change listener if available
     if (this.eventEmitter) {
       this.themeChangeSubscription = this.eventEmitter.addListener(
         'onThemeChanged',
         this.handleNativeThemeChange
       );
-      console.log('ThemeUtils: Added native theme change listener');
+      logger.log('Added native theme change listener');
     }
-    
+
     // Apply the current theme
     try {
       await this.applyThemeFromSystem();
-      console.log('ThemeUtils: Applied system theme:', this.currentTheme);
+      logger.log('Applied system theme:', this.currentTheme);
     } catch (error) {
-      console.error('ThemeUtils: Failed to apply system theme:', error);
+      logger.error('Failed to apply system theme:', error);
       // Fallback to light theme if system theme application fails
       this.currentTheme = 'light';
       this.notifyThemeChange('light');
@@ -126,28 +129,28 @@ export class ThemeUtils {
    * @param theme The theme to apply ('light' | 'dark' | null)
    */
   public async applyTheme(theme: ColorSchemeName): Promise<void> {
-    console.log('ThemeUtils: Applying theme:', theme);
-    
+    logger.log('Applying theme:', theme);
+
     if (!theme) {
-      console.warn('ThemeUtils: No theme specified, using light theme');
+      logger.warn('No theme specified, using light theme');
       theme = 'light';
     }
-    
+
     this.currentTheme = theme;
-    
+
     try {
       // Update native theme if available
       if (Platform.OS === 'android' && NativeModules.ThemeUtils && typeof NativeModules.ThemeUtils.setDarkMode === 'function') {
-        console.log('ThemeUtils: Setting native dark mode:', theme === 'dark');
+        logger.log('Setting native dark mode:', theme === 'dark');
         await NativeModules.ThemeUtils.setDarkMode(theme === 'dark');
       }
-      
+
       // Notify listeners
-      console.log('ThemeUtils: Notifying listeners about theme change');
+      logger.log('Notifying listeners about theme change');
       this.notifyThemeChange(theme);
-      console.log('ThemeUtils: Theme applied successfully:', theme);
+      logger.log('Theme applied successfully:', theme);
     } catch (error) {
-      console.error('ThemeUtils: Failed to apply theme:', error);
+      logger.error('Failed to apply theme:', error);
     }
   }
 
@@ -216,21 +219,21 @@ export class ThemeUtils {
    * Notify all listeners of a theme change
    */
   private notifyThemeChange(theme: ColorSchemeName): void {
-    console.log(`ThemeUtils: Notifying ${this.themeChangeListeners.length} listeners of theme change to ${theme}`);
-    
+    logger.log(`Notifying ${this.themeChangeListeners.length} listeners of theme change to ${theme}`);
+
     if (this.themeChangeListeners.length === 0) {
-      console.warn('ThemeUtils: No theme change listeners registered');
+      logger.warn('No theme change listeners registered');
     }
-    
+
     this.themeChangeListeners.forEach((listener, index) => {
       try {
-        console.log(`ThemeUtils: Calling listener ${index + 1}/${this.themeChangeListeners.length}`);
+        logger.log(`Calling listener ${index + 1}/${this.themeChangeListeners.length}`);
         listener(theme);
       } catch (error) {
-        console.error(`ThemeUtils: Error in theme change listener ${index + 1}:`, error);
+        logger.error(`Error in theme change listener ${index + 1}:`, error);
       }
     });
-    
-    console.log('ThemeUtils: All listeners notified');
+
+    logger.log('All listeners notified');
   }
 }
